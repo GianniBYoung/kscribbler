@@ -65,9 +65,9 @@ type Response struct {
 				ID int `json:"id"`
 			} `json:"editions"`
 		} `json:"books"`
-		// InsertReadingJournal struct {
-		// 	Errors *string `json:"errors"`
-		// } `json:"insert_reading_journal"`
+		InsertReadingJournal struct {
+			Errors *string `json:"errors"`
+		} `json:"insert_reading_journal"`
 	} `json:"data"`
 }
 
@@ -92,8 +92,18 @@ func init() {
 	}
 }
 
+func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", authToken)
+	req.Header.Set("Content-Type", "application/json")
+	return req, nil
+}
+
 // flesh out struct and associte book to hardcover
-func (bm *Bookmark) KoboToHardcover(ctx context.Context) {
+func (bm *Bookmark) koboToHardcover(client *http.Client, ctx context.Context) {
 	bm.Hardcover.Type = EntryQuote
 
 	if bm.Type == "annotation" { // double check this
@@ -144,29 +154,25 @@ func (bm *Bookmark) KoboToHardcover(ctx context.Context) {
 		log.Fatalf("Failed to encode GraphQL request: %v", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(bodyBytes))
+	req, err := newHardcoverRequest(ctx, bodyBytes)
 	if err != nil {
 		log.Fatalf("Failed to create request: %v", err)
 	}
-	req.Header.Set("Authorization", authToken)
-	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatalf("Request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	rawResp, _ := io.ReadAll(resp.Body)
-	fmt.Println("Raw response:\n", string(rawResp))
-
 	var findBookResp Response
 	if err := json.Unmarshal(rawResp, &findBookResp); err != nil {
+		log.Println("Raw response:\n", string(rawResp))
 		log.Fatalf("Failed to unmarshal response: %v", err)
 	}
 
 	if len(findBookResp.Data.Books) < 1 || len(findBookResp.Data.Books[0].Editions) < 1 {
-		log.Printf("Response:\n%+v\n", findBookResp)
 		log.Fatalf(
 			"Unable to ID Books from ISBN10: %s, ISBN13: %s, ASIN: %s",
 			bm.ISBN10,
@@ -209,22 +215,23 @@ func (entry Bookmark) postEntry(client *graphql.Client, ctx context.Context) err
 
 func main() {
 
+	graphClient := graphql.NewClient(apiURL)
 	ctx := context.Background()
 
 	testmark := bookmarks[0]
 	log.Printf("Test Bookmark is %v", testmark)
 
-	// testmark.Hardcover.BookID = 428605
 	testmark.ISBN10 = "081257558X"
 	testmark.ISBN13 = "9780812575583"
 	testmark.Hardcover.PrivacyLevel = PrivacyPrivate
-	// testmark.Hardcover.Type = "quote"
-	// err := testmark.postEntry(client, ctx)
-	// if err != nil {
-	// log.Printf("There was an error uploading quote to reading journal: %s\n", err)
-	// }
 
-	testmark.KoboToHardcover(ctx)
+	client := &http.Client{}
+	testmark.koboToHardcover(client, ctx)
+
+	err := testmark.postEntry(graphClient, ctx)
+	if err != nil {
+		log.Printf("There was an error uploading quote to reading journal: %s\n", err)
+	}
 
 	log.Println("Execution done")
 
