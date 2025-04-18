@@ -49,6 +49,7 @@ func (b Book) String() string {
 	result += "\n-- Bookmarks --\n"
 	for i, bm := range b.Bookmarks {
 		result += fmt.Sprintf("[%d]\n", i+1)
+		result += fmt.Sprintf("Chapter Title: %s\n", bm.ChapterTitle.String)
 		result += fmt.Sprintf("BookmarkID: %s\n", bm.BookmarkID)
 		result += fmt.Sprintf("Chapter Progress: %.2f%%\n", bm.ChapterProgress*100)
 
@@ -71,9 +72,35 @@ func (b Book) String() string {
 	return result
 }
 
+func ensureKscribblerUploadedColumn(db *sqlx.DB) error {
+	var count int
+	err := db.Get(&count, `
+		SELECT COUNT(*)
+		FROM pragma_table_info('Bookmark')
+		WHERE name = 'KscribblerUploaded';
+	`)
+	if err != nil {
+		return fmt.Errorf("error checking columns: %w", err)
+	}
+
+	if count == 0 {
+		// Column doesn't exist, create it
+		_, err := db.Exec(`ALTER TABLE Bookmark ADD COLUMN KscribblerUploaded INTEGER DEFAULT 0;`)
+		if err != nil {
+			return fmt.Errorf("error adding column: %w", err)
+		}
+		log.Println("Added missing column KscribblerUploaded to Bookmark table")
+	} else {
+		log.Println("KscribblerUploaded column already exists")
+	}
+
+	return nil
+}
+
 const apiURL = "https://api.hardcover.app/v1/graphql"
 
 var dbPath string = "/home/gianni/go/src/kscribbler/KoboReader.sqlite"
+var db *sqlx.DB
 var currentBook Book
 var authToken string
 
@@ -105,14 +132,14 @@ type Hardcover struct {
 
 // a single book will have multiple bookmarks(quotes|notes) with unique BookmarkIDs
 type Bookmark struct {
-	BookmarkID      string         `db:"BookmarkID"`
-	ChapterProgress float64        `db:"ChapterProgress"`
-	Quote           sql.NullString `db:"Text"`
-	Annotation      sql.NullString `db:"Annotation"`
-	Type            string         `db:"Type"`
-	// HardcoverType   EntryType
-	// Spoiler bool //idk how to find this yer
-	// hard cover info in a sep struct for unmarshalling eaze
+	BookmarkID         string         `db:"BookmarkID"`
+	ContentID          string         `db:"ContentID"`
+	ChapterProgress    float64        `db:"ChapterProgress"`
+	Quote              sql.NullString `db:"Text"`
+	Annotation         sql.NullString `db:"Annotation"`
+	Type               string         `db:"Type"`
+	ChapterTitle       sql.NullString `db:"ChapterTitle"`
+	KscribblerUploaded bool           `db:"KscribblerUploaded"`
 }
 
 type Response struct {
@@ -135,13 +162,15 @@ func init() {
 	if authToken == "" {
 		log.Fatal("HARDCOVER_API_TOKEN is not set")
 	}
-	db, err := sqlx.Open("sqlite", dbPath)
+	var err error
+	db, err = sqlx.Open("sqlite", dbPath)
 
 	if err != nil {
 		log.Print("Error opening database")
 		log.Fatal(err)
 	}
-	defer db.Close()
+
+	ensureKscribblerUploadedColumn(db)
 
 	cidquery := `
 		SELECT c.ContentID, c.ISBN
@@ -158,14 +187,26 @@ func init() {
 	}
 
 	err = db.Select(&currentBook.Bookmarks, `
-		SELECT b.BookmarkID, b.ChapterProgress, b.Text, b.Annotation, b.Type
-		FROM Bookmark b
-		WHERE b.ContentID LIKE ?
+	SELECT
+	b.BookmarkID,
+	b.ContentID,
+	b.ChapterProgress,
+	b.Text,
+	b.Annotation,
+	b.Type,
+	c.Title AS ChapterTitle
+	FROM Bookmark b
+	LEFT JOIN content c ON b.ContentID = c.ContentID
+	WHERE b.ContentID LIKE ?
+	AND b.Type != 'dogear'
+	AND b.Text IS NOT NULL;
 	`, currentBook.ContentID+"%")
 
 	if err != nil {
 		log.Fatal("Error getting bookmarks:", err)
 	}
+
+	currentBook.Hardcover.PrivacyLevel = 1 // public by default
 }
 
 func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error) {
@@ -255,6 +296,33 @@ func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 	book.Hardcover.EditionID = findBookResp.Data.Books[0].Editions[0].ID
 }
 
+func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) (error, bool) {
+	var isUploaded int
+
+	err := db.Get(&isUploaded, `
+		SELECT KscribblerUploaded
+		FROM Bookmark
+		WHERE BookmarkID = ?
+	`, bm.BookmarkID)
+	if err != nil {
+		return err, false
+	}
+
+	return nil, isUploaded == 1
+}
+
+func (bm Bookmark) markAsUploaded() error {
+	_, err := db.Exec(`
+		UPDATE Bookmark
+		SET KscribblerUploaded = 1
+		WHERE BookmarkID = ?
+	`, bm.BookmarkID)
+	if err != nil {
+		return fmt.Errorf("failed to mark bookmark as uploaded: %w", err)
+	}
+	return nil
+}
+
 func (entry Bookmark) postEntry(
 	client *graphql.Client,
 	ctx context.Context,
@@ -262,6 +330,14 @@ func (entry Bookmark) postEntry(
 	spoiler bool,
 	privacyLevel PrivacyLevel,
 ) error {
+	err, isUploaded := entry.hasBeenUploaded(db)
+	if err != nil {
+		log.Fatalf("failed to check if entry has been uploaded: %v", err)
+	}
+	if isUploaded {
+		log.Printf("Entry has already been uploaded, skipping: %s", entry.BookmarkID)
+		return nil
+	}
 
 	hardcoverType := "quote"
 	if entry.Type == "annotation" {
@@ -286,9 +362,10 @@ func (entry Bookmark) postEntry(
 
 	if err := client.Run(ctx, req, &resp); err != nil {
 		log.Printf("Error making GraphQL request %v ", err)
+	} else {
+		err := entry.markAsUploaded()
+		return err
 	}
-	fmt.Println(mutation)
-	fmt.Println(resp)
 
 	return nil
 
@@ -296,34 +373,26 @@ func (entry Bookmark) postEntry(
 
 func main() {
 
-	// graphClient := graphql.NewClient(apiURL)
+	defer db.Close()
+	graphClient := graphql.NewClient(apiURL)
 	ctx := context.Background()
 
-	// testmark := bookmarks[0]
-	// log.Printf("Test Bookmark is %v", testmark)
-	//
 	// testmark.ISBN10 = "081257558X"
 	// testmark.ISBN13 = "9780812575583"
-	// testmark.Hardcover.PrivacyLevel = PrivacyPrivate
 
 	client := &http.Client{}
 	currentBook.ISBN13 = "9780812575583" // still need to deal with isbn
 	currentBook.koboToHardcover(client, ctx)
-	fmt.Println(currentBook)
 
-	// entry type is borked
-	// err := testMark.postEntry(
-	// 	graphClient,
-	// 	ctx,
-	// 	currentBook.Hardcover.BookID,
-	// 	false,
-	// 	3,
-	// )
-	// if err != nil {
-	// 	log.Printf("There was an error uploading quote to reading journal: %s\n", err)
-	// }
+	err := currentBook.Bookmarks[0].postEntry(
+		graphClient,
+		ctx,
+		currentBook.Hardcover.BookID,
+		false,
+		currentBook.Hardcover.PrivacyLevel,
+	)
 
-	log.Println("Execution done")
+	if err != nil {
+		log.Printf("There was an error uploading quote to reading journal: %s\n", err)
+	}
 }
-
-// next steps clean up issues with print -> empty highlights somehow, discard dog ears -> fix in init query
