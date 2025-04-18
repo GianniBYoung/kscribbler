@@ -226,7 +226,11 @@ func init() {
 		log.Fatal(err)
 	}
 
-	ensureKscribblerUploadedColumn(db)
+	err = ensureKscribblerUploadedColumn(db)
+	if err != nil {
+		log.Println("error creating KscribblerUploaded column")
+		log.Fatal(err)
+	}
 
 	cidquery := `
 		SELECT c.ContentID, c.ISBN
@@ -240,18 +244,6 @@ func init() {
 
 	if err != nil {
 		log.Fatal("Error getting last opened ContentID:", err)
-	}
-
-	if currentBook.ISBN.Valid == false {
-		log.Println("Attempting to set isbn from highlights")
-		err, isbnFound := currentBook.SetIsbnFromHighlight()
-		if err != nil || isbnFound == false {
-			log.Println(err)
-			log.Fatal(
-				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscribbler:config:ISBN-xxxxxx`",
-			)
-		}
-
 	}
 
 	err = db.Select(&currentBook.Bookmarks, `
@@ -273,8 +265,25 @@ func init() {
 	if err != nil {
 		log.Fatal("Error getting bookmarks:", err)
 	}
+	if len(currentBook.Bookmarks) == 0 {
+		log.Println("Exiting. No highlights found")
+		os.Exit(0)
+	}
+
+	fmt.Println(currentBook)
+	if currentBook.ISBN.Valid == false {
+		log.Println("Attempting to set isbn from highlights")
+		err, isbnFound := currentBook.SetIsbnFromHighlight()
+		if err != nil || isbnFound == false {
+			log.Println(err)
+			log.Fatal(
+				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscribbler:config:ISBN-xxxxxx`",
+			)
+		}
+	}
 
 	currentBook.Hardcover.PrivacyLevel = 1 // public by default
+	fmt.Println(currentBook)
 }
 
 func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error) {
@@ -451,6 +460,7 @@ func main() {
 	client := &http.Client{}
 	currentBook.ISBN13 = "9780812575583" // still need to deal with isbn
 	currentBook.koboToHardcover(client, ctx)
+	fmt.Println(currentBook)
 
 	err := currentBook.Bookmarks[0].postEntry(
 		graphClient,
