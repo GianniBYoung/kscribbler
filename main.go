@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -95,6 +96,61 @@ func ensureKscribblerUploadedColumn(db *sqlx.DB) error {
 	}
 
 	return nil
+}
+
+func (b *Book) SetIsbnFromHighlight() (error, bool) {
+	isbn10Regex := regexp.MustCompile(`\b[0-9]{9}[0-9Xx]\b`)
+	isbn13Regex := regexp.MustCompile(`\b97[89][0-9]{10}\b`)
+
+	for _, bm := range b.Bookmarks {
+		if !bm.Quote.Valid {
+			continue
+		}
+
+		text := strings.TrimSpace(bm.Quote.String)
+
+		// Ignore if the highlight is very long (user probably highlighted a sentence)
+		if len(text) > 20 {
+			continue
+		}
+
+		var ISBN string
+		if isbn13Regex.MatchString(text) {
+			ISBN = isbn13Regex.FindString(text)
+			b.ISBN13 = ISBN
+		} else if isbn10Regex.MatchString(text) {
+			ISBN = isbn10Regex.FindString(text)
+			b.ISBN10 = ISBN
+		} else {
+			continue
+		}
+
+		// Update the content table with the found ISBN
+		_, err := db.Exec(`
+			UPDATE content
+			SET ISBN = ?
+			WHERE ContentID = ?
+		`, ISBN, b.ContentID)
+		if err != nil {
+			log.Printf("Failed to update ISBN for book: %v", err)
+			continue
+		}
+
+		// Delete the bookmark after updating
+		_, err = db.Exec(`
+			DELETE FROM Bookmark
+			WHERE BookmarkID = ?
+		`, bm.BookmarkID)
+		if err != nil {
+			log.Printf("Failed to delete Bookmark %s: %v", bm.BookmarkID, err)
+		} else {
+			log.Printf("Deleted BookmarkID %s after extracting ISBN", bm.BookmarkID)
+		}
+
+		return err, true
+
+	}
+	return nil, false
 }
 
 const apiURL = "https://api.hardcover.app/v1/graphql"
@@ -184,6 +240,18 @@ func init() {
 
 	if err != nil {
 		log.Fatal("Error getting last opened ContentID:", err)
+	}
+
+	if currentBook.ISBN.Valid == false {
+		log.Println("Attempting to set isbn from highlights")
+		err, isbnFound := currentBook.SetIsbnFromHighlight()
+		if err != nil || isbnFound == false {
+			log.Println(err)
+			log.Fatal(
+				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscribbler:config:ISBN-xxxxxx`",
+			)
+		}
+
 	}
 
 	err = db.Select(&currentBook.Bookmarks, `
@@ -396,3 +464,14 @@ func main() {
 		log.Printf("There was an error uploading quote to reading journal: %s\n", err)
 	}
 }
+
+// next steps
+// isbn shennanigans find|update|convert|make another column
+// maybe parse annotations starting with kscribbler.config - <directive>
+// maybe delete the annotation after
+// construct annotations with base
+// long term logging
+// how tf to install the program
+// how to trigger the program
+// actually write tests (maybe)
+// organize this mess
