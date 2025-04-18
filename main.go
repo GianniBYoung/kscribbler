@@ -17,43 +17,102 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func (b Book) String() string {
+	var result string
+
+	result += "========== Book ==========\n"
+	result += fmt.Sprintf("ContentID: %s\n", b.ContentID)
+
+	if b.ISBN.Valid {
+		result += fmt.Sprintf("ISBN: %s\n", b.ISBN.String)
+	} else {
+		result += "ISBN: (none)\n"
+	}
+
+	if b.ISBN10 != "" {
+		result += fmt.Sprintf("ISBN-10: %s\n", b.ISBN10)
+	}
+
+	if b.ISBN13 != "" {
+		result += fmt.Sprintf("ISBN-13: %s\n", b.ISBN13)
+	}
+
+	if b.ASIN != "" {
+		result += fmt.Sprintf("ASIN: %s\n", b.ASIN)
+	}
+
+	result += "\n-- Hardcover Info --\n"
+	result += fmt.Sprintf("BookID: %d\n", b.Hardcover.BookID)
+	result += fmt.Sprintf("EditionID: %d\n", b.Hardcover.EditionID)
+	result += fmt.Sprintf("PrivacyLevel: %d\n", b.Hardcover.PrivacyLevel)
+
+	result += "\n-- Bookmarks --\n"
+	for i, bm := range b.Bookmarks {
+		result += fmt.Sprintf("[%d]\n", i+1)
+		result += fmt.Sprintf("BookmarkID: %s\n", bm.BookmarkID)
+		result += fmt.Sprintf("Chapter Progress: %.2f%%\n", bm.ChapterProgress*100)
+
+		if bm.Quote.Valid {
+			result += fmt.Sprintf("Quote: %s\n", bm.Quote.String)
+		} else {
+			result += "Quote: (none)\n"
+		}
+
+		if bm.Annotation.Valid {
+			result += fmt.Sprintf("Annotation: %s\n", bm.Annotation.String)
+		} else {
+			result += "Annotation: (none)\n"
+		}
+
+		result += fmt.Sprintf("Type: %s\n", bm.Type)
+		result += "--------------------------\n"
+	}
+
+	return result
+}
+
 const apiURL = "https://api.hardcover.app/v1/graphql"
 
 var dbPath string = "/home/gianni/go/src/kscribbler/KoboReader.sqlite"
-var bookmarks []Bookmark
+var currentBook Book
 var authToken string
 
 type PrivacyLevel int
-type EntryType string
 
 const (
 	PrivacyPublic    = 1
 	PrivacyFollowers = 2
 	PrivacyPrivate   = 3
-	EntryQuote       = "quote"
-	EntryNote        = "note"
 )
 
+type Book struct {
+	ContentID string `db:"ContentID"`
+	// new books have isbn 13 *always
+	// 10 can be converted into 13
+	ISBN      sql.NullString `db:"ISBN"`
+	ISBN10    string
+	ISBN13    string
+	ASIN      string
+	Bookmarks []Bookmark
+	Hardcover Hardcover
+}
+
+type Hardcover struct {
+	BookID       int
+	EditionID    int
+	PrivacyLevel PrivacyLevel
+}
+
+// a single book will have multiple bookmarks(quotes|notes) with unique BookmarkIDs
 type Bookmark struct {
-	// info from kobo
 	BookmarkID      string         `db:"BookmarkID"`
-	ContentID       string         `db:"ContentID"`
 	ChapterProgress float64        `db:"ChapterProgress"`
 	Quote           sql.NullString `db:"Text"`
 	Annotation      sql.NullString `db:"Annotation"`
 	Type            string         `db:"Type"`
-	ISBN10          string
-	ISBN13          string
-	ASIN            string
-	Spoiler         bool //idk how to find this yer
-	// location data?
+	// HardcoverType   EntryType
+	// Spoiler bool //idk how to find this yer
 	// hard cover info in a sep struct for unmarshalling eaze
-	Hardcover struct {
-		BookID       int
-		EditionID    int
-		PrivacyLevel PrivacyLevel
-		Type         EntryType
-	}
 }
 
 type Response struct {
@@ -84,11 +143,28 @@ func init() {
 	}
 	defer db.Close()
 
-	query := "SELECT BookmarkID, ContentID, ChapterProgress, Text, Annotation, Type FROM Bookmark"
-	err = db.Select(&bookmarks, query)
+	cidquery := `
+		SELECT c.ContentID, c.ISBN
+		FROM content c
+		WHERE c.ContentType = 6
+			AND c.DateLastRead IS NOT NULL
+		ORDER BY c.DateLastRead DESC
+		LIMIT 1;
+	`
+	err = db.Get(&currentBook, cidquery)
+
 	if err != nil {
-		log.Print("Error with query")
-		log.Fatalln(err)
+		log.Fatal("Error getting last opened ContentID:", err)
+	}
+
+	err = db.Select(&currentBook.Bookmarks, `
+		SELECT b.BookmarkID, b.ChapterProgress, b.Text, b.Annotation, b.Type
+		FROM Bookmark b
+		WHERE b.ContentID LIKE ?
+	`, currentBook.ContentID+"%")
+
+	if err != nil {
+		log.Fatal("Error getting bookmarks:", err)
 	}
 }
 
@@ -103,23 +179,17 @@ func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error
 }
 
 // flesh out struct and associte book to hardcover
-func (bm *Bookmark) koboToHardcover(client *http.Client, ctx context.Context) {
-	bm.Hardcover.Type = EntryQuote
-
-	if bm.Type == "annotation" { // double check this
-		// handle annotated note here?
-		bm.Hardcover.Type = EntryNote
-	}
+func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 
 	var filters []string
-	if bm.ISBN13 != "" {
-		filters = append(filters, fmt.Sprintf(`{isbn_13: {_eq: "%s"}}`, bm.ISBN13))
+	if book.ISBN13 != "" {
+		filters = append(filters, fmt.Sprintf(`{isbn_13: {_eq: "%s"}}`, book.ISBN13))
 	}
-	if bm.ISBN10 != "" {
-		filters = append(filters, fmt.Sprintf(`{isbn_10: {_eq: "%s"}}`, bm.ISBN10))
+	if book.ISBN10 != "" {
+		filters = append(filters, fmt.Sprintf(`{isbn_10: {_eq: "%s"}}`, book.ISBN10))
 	}
-	if bm.ASIN != "" {
-		filters = append(filters, fmt.Sprintf(`{asin: {_eq: "%s"}}`, bm.ASIN))
+	if book.ASIN != "" {
+		filters = append(filters, fmt.Sprintf(`{asin: {_eq: "%s"}}`, book.ASIN))
 	}
 
 	orBlock := strings.Join(filters, ", ")
@@ -175,17 +245,28 @@ func (bm *Bookmark) koboToHardcover(client *http.Client, ctx context.Context) {
 	if len(findBookResp.Data.Books) < 1 || len(findBookResp.Data.Books[0].Editions) < 1 {
 		log.Fatalf(
 			"Unable to ID Books from ISBN10: %s, ISBN13: %s, ASIN: %s",
-			bm.ISBN10,
-			bm.ISBN13,
-			bm.ASIN,
+			book.ISBN10,
+			book.ISBN13,
+			book.ASIN,
 		)
 	}
 
-	bm.Hardcover.BookID = findBookResp.Data.Books[0].ID
-	bm.Hardcover.EditionID = findBookResp.Data.Books[0].Editions[0].ID
+	book.Hardcover.BookID = findBookResp.Data.Books[0].ID
+	book.Hardcover.EditionID = findBookResp.Data.Books[0].Editions[0].ID
 }
 
-func (entry Bookmark) postEntry(client *graphql.Client, ctx context.Context) error {
+func (entry Bookmark) postEntry(
+	client *graphql.Client,
+	ctx context.Context,
+	hardcoverID int,
+	spoiler bool,
+	privacyLevel PrivacyLevel,
+) error {
+
+	hardcoverType := "quote"
+	if entry.Type == "annotation" {
+		hardcoverType = "note"
+	}
 
 	mutation := fmt.Sprintf(`
 	mutation postquote {
@@ -195,8 +276,8 @@ func (entry Bookmark) postEntry(client *graphql.Client, ctx context.Context) err
     errors
   }
 }`,
-		entry.Hardcover.BookID, entry.Hardcover.Type, entry.Spoiler,
-		entry.Type, entry.Quote.String, entry.Hardcover.PrivacyLevel)
+		hardcoverID, hardcoverType, spoiler,
+		hardcoverType, entry.Quote.String, privacyLevel)
 
 	req := graphql.NewRequest(mutation)
 	req.Header.Set("Authorization", authToken)
@@ -215,29 +296,34 @@ func (entry Bookmark) postEntry(client *graphql.Client, ctx context.Context) err
 
 func main() {
 
-	graphClient := graphql.NewClient(apiURL)
+	// graphClient := graphql.NewClient(apiURL)
 	ctx := context.Background()
 
-	testmark := bookmarks[0]
-	log.Printf("Test Bookmark is %v", testmark)
-
-	testmark.ISBN10 = "081257558X"
-	testmark.ISBN13 = "9780812575583"
-	testmark.Hardcover.PrivacyLevel = PrivacyPrivate
+	// testmark := bookmarks[0]
+	// log.Printf("Test Bookmark is %v", testmark)
+	//
+	// testmark.ISBN10 = "081257558X"
+	// testmark.ISBN13 = "9780812575583"
+	// testmark.Hardcover.PrivacyLevel = PrivacyPrivate
 
 	client := &http.Client{}
-	testmark.koboToHardcover(client, ctx)
+	currentBook.ISBN13 = "9780812575583" // still need to deal with isbn
+	currentBook.koboToHardcover(client, ctx)
+	fmt.Println(currentBook)
 
-	err := testmark.postEntry(graphClient, ctx)
-	if err != nil {
-		log.Printf("There was an error uploading quote to reading journal: %s\n", err)
-	}
-
-	log.Println("Execution done")
-
-	// for _, bm := range bookmarks {
-	// 	log.Printf("Bookmark in %s: %s", bm.ContentID, bm.Quote.String)
-	// 	// fmt.Fprintf(output, "Bookmark in %s: %s\n", bm.ContentID, bm.Quote.String)
+	// entry type is borked
+	// err := testMark.postEntry(
+	// 	graphClient,
+	// 	ctx,
+	// 	currentBook.Hardcover.BookID,
+	// 	false,
+	// 	3,
+	// )
+	// if err != nil {
+	// 	log.Printf("There was an error uploading quote to reading journal: %s\n", err)
 	// }
 
+	log.Println("Execution done")
 }
+
+// next steps clean up issues with print -> empty highlights somehow, discard dog ears -> fix in init query
