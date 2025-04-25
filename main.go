@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/GianniBYoung/simpleISBN"
 	"github.com/jmoiron/sqlx"
 	"github.com/machinebox/graphql"
 	_ "modernc.org/sqlite"
@@ -20,32 +21,6 @@ import (
 
 func (b Book) String() string {
 	var result string
-
-	result += "========== Book ==========\n"
-	result += fmt.Sprintf("ContentID: %s\n", b.ContentID)
-
-	if b.ISBN.Valid {
-		result += fmt.Sprintf("ISBN: %s\n", b.ISBN.String)
-	} else {
-		result += "ISBN: (none)\n"
-	}
-
-	if b.ISBN10 != "" {
-		result += fmt.Sprintf("ISBN-10: %s\n", b.ISBN10)
-	}
-
-	if b.ISBN13 != "" {
-		result += fmt.Sprintf("ISBN-13: %s\n", b.ISBN13)
-	}
-
-	if b.ASIN != "" {
-		result += fmt.Sprintf("ASIN: %s\n", b.ASIN)
-	}
-
-	result += "\n-- Hardcover Info --\n"
-	result += fmt.Sprintf("BookID: %d\n", b.Hardcover.BookID)
-	result += fmt.Sprintf("EditionID: %d\n", b.Hardcover.EditionID)
-	result += fmt.Sprintf("PrivacyLevel: %d\n", b.Hardcover.PrivacyLevel)
 
 	result += "\n-- Bookmarks --\n"
 	for i, bm := range b.Bookmarks {
@@ -69,6 +44,16 @@ func (b Book) String() string {
 		result += fmt.Sprintf("Type: %s\n", bm.Type)
 		result += "--------------------------\n"
 	}
+
+	result += "========== Book ==========\n"
+	result += fmt.Sprintf("ContentID: %s\n", b.ContentID)
+
+	result += fmt.Sprintf("ISBN: %s\n", b.ISBN)
+
+	result += "\n-- Hardcover Info --\n"
+	result += fmt.Sprintf("BookID: %d\n", b.Hardcover.BookID)
+	result += fmt.Sprintf("EditionID: %d\n", b.Hardcover.EditionID)
+	result += fmt.Sprintf("PrivacyLevel: %d\n", b.Hardcover.PrivacyLevel)
 
 	return result
 }
@@ -98,6 +83,15 @@ func ensureKscribblerUploadedColumn(db *sqlx.DB) error {
 	return nil
 }
 
+func (b *Book) SetIsbn() error {
+	isbn, err := simpleISBN.NewISBN(b.KoboISBN.String)
+	if err != nil {
+		return err
+	}
+	b.ISBN = *isbn
+	return nil
+}
+
 func (b *Book) SetIsbnFromHighlight() (error, bool) {
 	isbn10Regex := regexp.MustCompile(`\b[0-9]{9}[0-9Xx]\b`)
 	isbn13Regex := regexp.MustCompile(`\b97[89][0-9]{10}\b`)
@@ -110,27 +104,34 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 		text := strings.TrimSpace(bm.Quote.String)
 
 		// Ignore if the highlight is very long (user probably highlighted a sentence)
-		if len(text) > 20 {
+		if len(text) > 30 {
 			continue
 		}
 
-		var ISBN string
+		var isbn *simpleISBN.ISBN
+		var err error
+		var match string
 		if isbn13Regex.MatchString(text) {
-			ISBN = isbn13Regex.FindString(text)
-			b.ISBN13 = ISBN
+			match = isbn13Regex.FindString(text)
 		} else if isbn10Regex.MatchString(text) {
-			ISBN = isbn10Regex.FindString(text)
-			b.ISBN10 = ISBN
+			match = isbn10Regex.FindString(text)
 		} else {
 			continue
 		}
 
+		//potentially handle the fatal by removing problem quote?
+		isbn, err = simpleISBN.NewISBN(match)
+		if err != nil {
+			log.Fatalf("ISBN matched from highlight but failed to parse:\n%s\n%s", match, err)
+			b.ISBN = *isbn
+		}
+
 		// Update the content table with the found ISBN
-		_, err := db.Exec(`
+		_, err = db.Exec(`
 			UPDATE content
 			SET ISBN = ?
 			WHERE ContentID = ?
-		`, ISBN, b.ContentID)
+		`, isbn, b.ContentID)
 		if err != nil {
 			log.Printf("Failed to update ISBN for book: %v", err)
 			continue
@@ -169,13 +170,9 @@ const (
 )
 
 type Book struct {
-	ContentID string `db:"ContentID"`
-	// new books have isbn 13 *always
-	// 10 can be converted into 13
-	ISBN      sql.NullString `db:"ISBN"`
-	ISBN10    string
-	ISBN13    string
-	ASIN      string
+	ContentID string         `db:"ContentID"`
+	KoboISBN  sql.NullString `db:"ISBN"`
+	ISBN      simpleISBN.ISBN
 	Bookmarks []Bookmark
 	Hardcover Hardcover
 }
@@ -272,6 +269,7 @@ func init() {
 
 	fmt.Println(currentBook)
 	if currentBook.ISBN.Valid == false {
+	if currentBook.KoboISBN.Valid == false {
 		log.Println("Attempting to set isbn from highlights")
 		err, isbnFound := currentBook.SetIsbnFromHighlight()
 		if err != nil || isbnFound == false {
@@ -280,6 +278,12 @@ func init() {
 				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscribbler:config:ISBN-xxxxxx`",
 			)
 		}
+	} else {
+		err = currentBook.SetIsbn()
+		if err != nil {
+			fmt.Printf("Error setting ISBN: %v", err)
+		}
+		fmt.Println(currentBook.ISBN)
 	}
 
 	currentBook.Hardcover.PrivacyLevel = 1 // public by default
@@ -300,14 +304,11 @@ func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error
 func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 
 	var filters []string
-	if book.ISBN13 != "" {
-		filters = append(filters, fmt.Sprintf(`{isbn_13: {_eq: "%s"}}`, book.ISBN13))
+	if book.ISBN.ISBN13Number != "" {
+		filters = append(filters, fmt.Sprintf(`{isbn_13: {_eq: "%s"}}`, book.ISBN.ISBN13Number))
 	}
-	if book.ISBN10 != "" {
-		filters = append(filters, fmt.Sprintf(`{isbn_10: {_eq: "%s"}}`, book.ISBN10))
-	}
-	if book.ASIN != "" {
-		filters = append(filters, fmt.Sprintf(`{asin: {_eq: "%s"}}`, book.ASIN))
+	if book.ISBN.ISBN10Number != "" {
+		filters = append(filters, fmt.Sprintf(`{isbn_10: {_eq: "%s"}}`, book.ISBN.ISBN10Number))
 	}
 
 	orBlock := strings.Join(filters, ", ")
@@ -362,10 +363,9 @@ func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 
 	if len(findBookResp.Data.Books) < 1 || len(findBookResp.Data.Books[0].Editions) < 1 {
 		log.Fatalf(
-			"Unable to ID Books from ISBN10: %s, ISBN13: %s, ASIN: %s",
-			book.ISBN10,
-			book.ISBN13,
-			book.ASIN,
+			"Unable to ID Books from ISBN.ISBN10Number: %s, ISBN.ISBN13Number: %s",
+			book.ISBN.ISBN10Number,
+			book.ISBN.ISBN13Number,
 		)
 	}
 

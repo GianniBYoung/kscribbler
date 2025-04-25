@@ -13,6 +13,7 @@ require (
 )
 
 require (
+	github.com/GianniBYoung/simpleISBN v0.0.0-20250420213539-849eafc61686
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/machinebox/graphql v0.2.2

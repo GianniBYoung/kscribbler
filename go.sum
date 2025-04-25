@@ -1,5 +1,7 @@
 filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
 filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
+github.com/GianniBYoung/simpleISBN v0.0.0-20250420213539-849eafc61686 h1:jG75TVbv/d1kigQVjnKa+LIxCIjD0953lx5MHKmx6QM=
+github.com/GianniBYoung/simpleISBN v0.0.0-20250420213539-849eafc61686/go.mod h1:ekgUMRhoPIiGqthmUXktMuqfy+rbdoYgHSsaSJuBXv8=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/go-sql-driver/mysql v1.8.1 h1:LedoTUt/eveggdHS9qUFC1EFSa8bU2+1pZjSRpvNJ1Y=
