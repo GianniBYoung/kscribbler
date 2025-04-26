@@ -21,7 +21,7 @@ import (
 
 const apiURL = "https://api.hardcover.app/v1/graphql"
 
-var dbPath string = "/home/gianni/go/src/kscribbler/KoboReader.sqlite"
+var dbPath string
 var db *sqlx.DB
 var currentBook Book
 var authToken string
@@ -139,7 +139,6 @@ func ensureKscribblerUploadedColumn(db *sqlx.DB) error {
 	return nil
 }
 
-// this is being set to nil
 func (b *Book) SetIsbn() error {
 	isbn, err := simpleISBN.NewISBN(b.KoboISBN.String)
 	if err != nil {
@@ -150,8 +149,8 @@ func (b *Book) SetIsbn() error {
 }
 
 func (b *Book) SetIsbnFromHighlight() (error, bool) {
-	isbn10Regex := regexp.MustCompile(`\b[0-9]{9}[0-9Xx]\b`)
-	isbn13Regex := regexp.MustCompile(`\b97[89][0-9]{10}\b`)
+	isbn10Regex := regexp.MustCompile(`[0-9][-0-9]{8,12}[0-9Xx]`)
+	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
 
 	for _, bm := range b.Bookmarks {
 		if !bm.Quote.Valid {
@@ -161,7 +160,7 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 		text := strings.TrimSpace(bm.Quote.String)
 
 		// Ignore if the highlight is very long (user probably highlighted a sentence)
-		if len(text) > 30 {
+		if len(text) > 45 {
 			continue
 		}
 
@@ -175,20 +174,22 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 		} else {
 			continue
 		}
+		log.Println("ISBN FOUND")
+		log.Println(match)
 
 		//potentially handle the fatal by removing problem quote?
 		isbn, err = simpleISBN.NewISBN(match)
 		if err != nil {
 			log.Fatalf("ISBN matched from highlight but failed to parse:\n%s\n%s", match, err)
-			b.ISBN = *isbn
 		}
+		b.ISBN = *isbn
 
-		// Update the content table with the found ISBN
+		// Update the content table with the found ISBN as isbn-13
 		_, err = db.Exec(`
 			UPDATE content
 			SET ISBN = ?
 			WHERE ContentID = ?
-		`, isbn, b.ContentID)
+		`, isbn.ISBN13Number, b.ContentID)
 		if err != nil {
 			log.Printf("Failed to update ISBN for book: %v", err)
 			continue
@@ -212,10 +213,16 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 }
 
 func init() {
+
 	authToken = os.Getenv("HARDCOVER_API_TOKEN")
 	if authToken == "" {
 		log.Fatal("HARDCOVER_API_TOKEN is not set")
 	}
+
+	if os.Getenv("KSCRIBBLER_DB_PATH") != "" {
+		dbPath = os.Getenv("KSCRIBBLER_DB_PATH")
+	}
+
 	var err error
 	db, err = sqlx.Open("sqlite", dbPath)
 
@@ -267,11 +274,6 @@ func init() {
 		log.Println("Exiting. No highlights found")
 		os.Exit(0)
 	}
-
-	currentBook.KoboISBN.String = "9780812575583" // still need to deal with isbn
-	currentBook.KoboISBN.Valid = true
-	fmt.Println(currentBook.KoboISBN)
-	fmt.Println(currentBook.KoboISBN.Valid)
 
 	if currentBook.KoboISBN.Valid == false {
 		log.Println("Attempting to set isbn from highlights")
@@ -458,11 +460,7 @@ func main() {
 	graphClient := graphql.NewClient(apiURL)
 	ctx := context.Background()
 
-	// testmark.ISBN.ISBN10Number = "081257558X"
-	// testmark.ISBN.ISBN13Number = "9780812575583"
-
 	client := &http.Client{}
-	// currentBook.ISBN.ISBN13Number = "9780812575583" // still need to deal with isbn
 	currentBook.koboToHardcover(client, ctx)
 	fmt.Println(currentBook)
 
@@ -477,15 +475,10 @@ func main() {
 	if err != nil {
 		log.Printf("There was an error uploading quote to reading journal: %s\n", err)
 	}
-	fmt.Println("isbn 10")
-	fmt.Println(currentBook.ISBN.ISBN10Number)
-	fmt.Println("isbn 10")
 }
 
 // next steps
-// isbn shennanigans find|update|convert|make another column
 // maybe parse annotations starting with kscribbler.config - <directive>
-// maybe delete the annotation after
 // construct annotations with base
 // long term logging
 // how tf to install the program
