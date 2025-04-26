@@ -18,8 +18,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const apiURL = "https://api.hardcover.app/v1/graphql"
-
 var dbPath string
 var db *sqlx.DB
 var currentBook Book
@@ -28,9 +26,10 @@ var authToken string
 type PrivacyLevel int
 
 const (
-	PrivacyPublic    = 1
-	PrivacyFollowers = 2
-	PrivacyPrivate   = 3
+	PrivacyPublic    PrivacyLevel = 1
+	PrivacyFollowers PrivacyLevel = 2
+	PrivacyPrivate   PrivacyLevel = 3
+	apiURL                        = "https://api.hardcover.app/v1/graphql"
 )
 
 type Book struct {
