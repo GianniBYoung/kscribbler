@@ -19,6 +19,62 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const apiURL = "https://api.hardcover.app/v1/graphql"
+
+var dbPath string = "/home/gianni/go/src/kscribbler/KoboReader.sqlite"
+var db *sqlx.DB
+var currentBook Book
+var authToken string
+
+type PrivacyLevel int
+
+const (
+	PrivacyPublic    = 1
+	PrivacyFollowers = 2
+	PrivacyPrivate   = 3
+)
+
+type Book struct {
+	ContentID string         `db:"ContentID"`
+	KoboISBN  sql.NullString `db:"ISBN"`
+	ISBN      simpleISBN.ISBN
+	Bookmarks []Bookmark
+	Hardcover Hardcover
+}
+
+type Hardcover struct {
+	BookID       int
+	EditionID    int
+	PrivacyLevel PrivacyLevel
+}
+
+// a single book will have multiple bookmarks(quotes|notes) with unique BookmarkIDs
+type Bookmark struct {
+	BookmarkID         string         `db:"BookmarkID"`
+	ContentID          string         `db:"ContentID"`
+	ChapterProgress    float64        `db:"ChapterProgress"`
+	Quote              sql.NullString `db:"Text"`
+	Annotation         sql.NullString `db:"Annotation"`
+	Type               string         `db:"Type"`
+	ChapterTitle       sql.NullString `db:"ChapterTitle"`
+	KscribblerUploaded bool           `db:"KscribblerUploaded"`
+}
+
+type Response struct {
+	Data struct {
+		Books []struct {
+			ID       int    `json:"id"`
+			Title    string `json:"title"`
+			Editions []struct {
+				ID int `json:"id"`
+			} `json:"editions"`
+		} `json:"books"`
+		InsertReadingJournal struct {
+			Errors *string `json:"errors"`
+		} `json:"insert_reading_journal"`
+	} `json:"data"`
+}
+
 func (b Book) String() string {
 	var result string
 
@@ -83,6 +139,7 @@ func ensureKscribblerUploadedColumn(db *sqlx.DB) error {
 	return nil
 }
 
+// this is being set to nil
 func (b *Book) SetIsbn() error {
 	isbn, err := simpleISBN.NewISBN(b.KoboISBN.String)
 	if err != nil {
@@ -154,62 +211,6 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 	return nil, false
 }
 
-const apiURL = "https://api.hardcover.app/v1/graphql"
-
-var dbPath string = "/home/gianni/go/src/kscribbler/KoboReader.sqlite"
-var db *sqlx.DB
-var currentBook Book
-var authToken string
-
-type PrivacyLevel int
-
-const (
-	PrivacyPublic    = 1
-	PrivacyFollowers = 2
-	PrivacyPrivate   = 3
-)
-
-type Book struct {
-	ContentID string         `db:"ContentID"`
-	KoboISBN  sql.NullString `db:"ISBN"`
-	ISBN      simpleISBN.ISBN
-	Bookmarks []Bookmark
-	Hardcover Hardcover
-}
-
-type Hardcover struct {
-	BookID       int
-	EditionID    int
-	PrivacyLevel PrivacyLevel
-}
-
-// a single book will have multiple bookmarks(quotes|notes) with unique BookmarkIDs
-type Bookmark struct {
-	BookmarkID         string         `db:"BookmarkID"`
-	ContentID          string         `db:"ContentID"`
-	ChapterProgress    float64        `db:"ChapterProgress"`
-	Quote              sql.NullString `db:"Text"`
-	Annotation         sql.NullString `db:"Annotation"`
-	Type               string         `db:"Type"`
-	ChapterTitle       sql.NullString `db:"ChapterTitle"`
-	KscribblerUploaded bool           `db:"KscribblerUploaded"`
-}
-
-type Response struct {
-	Data struct {
-		Books []struct {
-			ID       int    `json:"id"`
-			Title    string `json:"title"`
-			Editions []struct {
-				ID int `json:"id"`
-			} `json:"editions"`
-		} `json:"books"`
-		InsertReadingJournal struct {
-			Errors *string `json:"errors"`
-		} `json:"insert_reading_journal"`
-	} `json:"data"`
-}
-
 func init() {
 	authToken = os.Getenv("HARDCOVER_API_TOKEN")
 	if authToken == "" {
@@ -267,8 +268,11 @@ func init() {
 		os.Exit(0)
 	}
 
-	fmt.Println(currentBook)
-	if currentBook.ISBN.Valid == false {
+	currentBook.KoboISBN.String = "9780812575583" // still need to deal with isbn
+	currentBook.KoboISBN.Valid = true
+	fmt.Println(currentBook.KoboISBN)
+	fmt.Println(currentBook.KoboISBN.Valid)
+
 	if currentBook.KoboISBN.Valid == false {
 		log.Println("Attempting to set isbn from highlights")
 		err, isbnFound := currentBook.SetIsbnFromHighlight()
@@ -454,11 +458,11 @@ func main() {
 	graphClient := graphql.NewClient(apiURL)
 	ctx := context.Background()
 
-	// testmark.ISBN10 = "081257558X"
-	// testmark.ISBN13 = "9780812575583"
+	// testmark.ISBN.ISBN10Number = "081257558X"
+	// testmark.ISBN.ISBN13Number = "9780812575583"
 
 	client := &http.Client{}
-	currentBook.ISBN13 = "9780812575583" // still need to deal with isbn
+	// currentBook.ISBN.ISBN13Number = "9780812575583" // still need to deal with isbn
 	currentBook.koboToHardcover(client, ctx)
 	fmt.Println(currentBook)
 
@@ -473,6 +477,9 @@ func main() {
 	if err != nil {
 		log.Printf("There was an error uploading quote to reading journal: %s\n", err)
 	}
+	fmt.Println("isbn 10")
+	fmt.Println(currentBook.ISBN.ISBN10Number)
+	fmt.Println("isbn 10")
 }
 
 // next steps
