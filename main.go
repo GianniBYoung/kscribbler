@@ -15,7 +15,6 @@ import (
 
 	"github.com/GianniBYoung/simpleISBN"
 	"github.com/jmoiron/sqlx"
-	"github.com/machinebox/graphql"
 	_ "modernc.org/sqlite"
 )
 
@@ -293,7 +292,7 @@ func init() {
 	}
 
 	currentBook.Hardcover.PrivacyLevel = 1 // public by default
-	fmt.Println(currentBook)
+	// fmt.Println(currentBook)
 }
 
 func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error) {
@@ -340,7 +339,7 @@ func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 			}
 		}`, orBlock, orBlock)
 
-	fmt.Println("Final Query:\n", query)
+	// log.Println("Final Query:\n", query)
 
 	// Build JSON payload
 	requestBody := map[string]string{"query": query}
@@ -379,7 +378,7 @@ func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 	book.Hardcover.EditionID = findBookResp.Data.Books[0].Editions[0].ID
 }
 
-func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) (error, bool) {
+func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) (bool, error) {
 	var isUploaded int
 
 	err := db.Get(&isUploaded, `
@@ -388,10 +387,10 @@ func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) (error, bool) {
 		WHERE BookmarkID = ?
 	`, bm.BookmarkID)
 	if err != nil {
-		return err, false
+		return false, err
 	}
 
-	return nil, isUploaded == 1
+	return isUploaded != 0, nil
 }
 
 func (bm Bookmark) markAsUploaded() error {
@@ -407,13 +406,13 @@ func (bm Bookmark) markAsUploaded() error {
 }
 
 func (entry Bookmark) postEntry(
-	client *graphql.Client,
+	client *http.Client,
 	ctx context.Context,
 	hardcoverID int,
 	spoiler bool,
 	privacyLevel PrivacyLevel,
 ) error {
-	err, isUploaded := entry.hasBeenUploaded(db)
+	isUploaded, err := entry.hasBeenUploaded(db)
 	if err != nil {
 		log.Fatalf("failed to check if entry has been uploaded: %v", err)
 	}
@@ -422,11 +421,18 @@ func (entry Bookmark) postEntry(
 		return nil
 	}
 
+	quote := strings.TrimSpace(entry.Quote.String)
+	annotation := strings.TrimSpace(entry.Annotation.String)
+
+	entryText := quote
+
 	hardcoverType := "quote"
 	if entry.Type == "annotation" {
 		hardcoverType = "note"
+		entryText = fmt.Sprintf("%s\n\n============\n\n%s", quote, annotation)
 	}
 
+	entryText = strings.ReplaceAll(entryText, `"""`, `\"\"\"`)
 	mutation := fmt.Sprintf(`
 	mutation postquote {
     insert_reading_journal(
@@ -436,20 +442,22 @@ func (entry Bookmark) postEntry(
   }
 }`,
 		hardcoverID, hardcoverType, spoiler,
-		hardcoverType, entry.Quote.String, privacyLevel)
+		hardcoverType, entryText, privacyLevel)
 
-	req := graphql.NewRequest(mutation)
-	req.Header.Set("Authorization", authToken)
+	reqBody := map[string]string{"query": mutation}
+	bodyBytes, _ := json.Marshal(reqBody)
+	req, err := newHardcoverRequest(ctx, bodyBytes)
 
-	var resp Response
-
-	if err := client.Run(ctx, req, &resp); err != nil {
-		log.Printf("Error making GraphQL request %v ", err)
-	} else {
-		err := entry.markAsUploaded()
-		return err
+	// resp, err := client.Do(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error with post response %s", err)
 	}
+	defer resp.Body.Close()
 
+	rawResp, _ := io.ReadAll(resp.Body)
+	fmt.Println("Hardcover response:", string(rawResp))
+	entry.markAsUploaded()
 	return nil
 
 }
@@ -457,15 +465,14 @@ func (entry Bookmark) postEntry(
 func main() {
 
 	defer db.Close()
-	graphClient := graphql.NewClient(apiURL)
 	ctx := context.Background()
 
 	client := &http.Client{}
 	currentBook.koboToHardcover(client, ctx)
-	fmt.Println(currentBook)
+	fmt.Println(currentBook.Bookmarks[0])
 
 	err := currentBook.Bookmarks[0].postEntry(
-		graphClient,
+		client,
 		ctx,
 		currentBook.Hardcover.BookID,
 		false,
@@ -485,3 +492,5 @@ func main() {
 // how to trigger the program
 // actually write tests (maybe)
 // organize this mess
+// validate that the isbn matched an existing book in hardcover
+// better marking of uploaded
