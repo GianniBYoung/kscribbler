@@ -1,10 +1,14 @@
+---
+version: 2
 
 project_name: kscribbler
 
+before:
+  hooks:
+    - go mod tidy
+
 builds:
-  - id: kscribbler
-    dir: .
-    main: ./cmd/kscribbler
+  - main: ./cmd/kscribbler
     binary: kscribbler
     goos:
       - linux
@@ -12,22 +16,25 @@ builds:
       - arm
     goarm:
       - 7
-    ldflags: "-s -w"
-
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - "-s -w"
 archives:
-  - format: tar.gz
+  - id: kobo
     name_template: KoboRoot
+    formats: tar.gz
+    wrap_in_directory: false
+    meta: true
     files:
-      - etc/udev/rules.d/98-kscribbler.rules
-      - mnt/onboard/.adds/nm/kscribbler
-      - opt/bin/kscribbler
-    replacements:
-      linux: ""
-    wrap_in_directory: true
-
-nfpms:
-  - package_name: kscribbler
+      - none*
+      - src: ./packaging/KoboRoot
+        dst: ./
+      - src: ./dist/kscribbler*/kscribbler
+        dst: ./opt/bin
 
 release:
   draft: true
-  prerelease: false
+
+checksum:
+  name_template: "checksums.txt"
