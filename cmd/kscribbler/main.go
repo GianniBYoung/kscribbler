@@ -18,10 +18,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var dbPath string
 var db *sqlx.DB
 var currentBook Book
 var authToken string
+var dbPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 
 type PrivacyLevel int
 
@@ -217,8 +217,8 @@ func init() {
 		log.Fatal("HARDCOVER_API_TOKEN is not set")
 	}
 
-	if os.Getenv("KSCRIBBLER_DB_PATH") != "" {
-		dbPath = os.Getenv("KSCRIBBLER_DB_PATH")
+	if devDBPath := os.Getenv("KSCRIBBLER_DB_PATH"); devDBPath != "" {
+		dbPath = devDBPath
 	}
 
 	var err error
