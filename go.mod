@@ -8,15 +8,9 @@ require (
 )
 
 require (
-	github.com/matryer/is v1.4.1 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
-)
-
-require (
 	github.com/GianniBYoung/simpleISBN v0.0.0-20250420213539-849eafc61686
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/machinebox/graphql v0.2.2
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-sqlite3 v1.14.27 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
