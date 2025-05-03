@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,6 +26,8 @@ var currentBook Book
 var authToken string
 var dbPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 
+//go:embed certs/hardcover.pem
+var hardcoverCert []byte
 
 type PrivacyLevel int
 
@@ -470,12 +475,28 @@ func (entry Bookmark) postEntry(
 
 }
 
+// http client with embedded CA bundle for api.hardcover.app
+func newHTTPClient() (*http.Client, error) {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(hardcoverCert) {
+		return nil, fmt.Errorf("failed to parse embedded CA bundle")
+	}
+	tlsConfig := &tls.Config{
+		RootCAs: pool,
+	}
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	return &http.Client{Transport: transport}, nil
+}
+
 func main() {
 
 	defer db.Close()
 	ctx := context.Background()
 
-	client := &http.Client{}
+	client, err := newHTTPClient()
+	if err != nil {
+		log.Fatalf("Failed to create HTTP client: %v", err)
+	}
 
 	currentBook.koboToHardcover(client, ctx)
 
