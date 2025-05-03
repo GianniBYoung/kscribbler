@@ -23,7 +23,7 @@ builds:
 archives:
   - id: kobo
     name_template: KoboRoot
-    formats: tar.gz
+    formats: tgz
     wrap_in_directory: false
     meta: true
     files:
