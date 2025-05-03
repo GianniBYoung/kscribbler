@@ -18,6 +18,7 @@ import (
 
 	"github.com/GianniBYoung/simpleISBN"
 	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 	_ "modernc.org/sqlite"
 )
 
@@ -219,9 +220,12 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 
 func init() {
 
+	godotenv.Load("/mnt/onboard/.kobo/.adds/kscribbler/config.env")
 	authToken = os.Getenv("HARDCOVER_API_TOKEN")
 	if authToken == "" {
-		log.Fatal("HARDCOVER_API_TOKEN is not set")
+		log.Fatalf(
+			"HARDCOVER_API_TOKEN is not set.\nPlease set it in /mnt/onboard/.kobo/.adds/kscribbler/config.env\n",
+		)
 	}
 
 	if devDBPath := os.Getenv("KSCRIBBLER_DB_PATH"); devDBPath != "" {
@@ -523,3 +527,7 @@ func main() {
 // organize this mess
 // validate that the isbn matched an existing book in hardcover
 // better marking of uploaded
+// version command/flag
+// how update
+// remove isbn/ other directives from bookmark struct when it gets deleted from the db. new type?
+// make sure quotes appear in order
