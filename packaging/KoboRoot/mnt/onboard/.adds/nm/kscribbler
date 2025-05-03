@@ -1,1 +1,1 @@
-menu_item:reader:Kscribbler Sync:cmd_spawn:quiet:/opt/bin/kscribbler >> /mnt/onboard/.adds/kscibbler/kscribbler.log 2>&1
+menu_item:reader:Kscribbler Sync:cmd_spawn:quiet:/opt/bin/kscribbler >> /mnt/onboard/.adds/kscribbler/kscribbler.log 2>&1

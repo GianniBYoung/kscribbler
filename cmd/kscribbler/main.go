@@ -220,7 +220,7 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 
 func init() {
 
-	godotenv.Load("/mnt/onboard/.kobo/.adds/kscribbler/config.env")
+	godotenv.Load("/mnt/onboard/.adds/kscribbler/config.env")
 	authToken = os.Getenv("HARDCOVER_API_TOKEN")
 	if authToken == "" {
 		log.Fatalf(
@@ -517,11 +517,11 @@ func main() {
 			log.Printf("There was an error uploading quote to reading journal: %s\n", err)
 		}
 	}
+	log.Printf("Finished uploading bookmarks for %s to hardcover", currentBook.ContentID)
 }
 
 // next steps
 // maybe parse annotations starting with kscribbler.config - <directive>
-// long term logging
 // how to trigger the program
 // actually write tests (maybe)
 // organize this mess
@@ -531,3 +531,4 @@ func main() {
 // how update
 // remove isbn/ other directives from bookmark struct when it gets deleted from the db. new type?
 // make sure quotes appear in order
+// make the book title available
