@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/GianniBYoung/simpleISBN"
 	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 	_ "modernc.org/sqlite"
 )
 
@@ -22,6 +26,9 @@ var db *sqlx.DB
 var currentBook Book
 var authToken string
 var dbPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
+
+//go:embed certs/hardcover.pem
+var hardcoverCert []byte
 
 type PrivacyLevel int
 
@@ -194,6 +201,7 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 		}
 
 		// Delete the bookmark after updating
+		//TODO: DELETE THIS FROM THE STRUCT
 		_, err = db.Exec(`
 			DELETE FROM Bookmark
 			WHERE BookmarkID = ?
@@ -212,9 +220,12 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 
 func init() {
 
+	godotenv.Load("/mnt/onboard/.adds/kscribbler/config.env")
 	authToken = os.Getenv("HARDCOVER_API_TOKEN")
 	if authToken == "" {
-		log.Fatal("HARDCOVER_API_TOKEN is not set")
+		log.Fatalf(
+			"HARDCOVER_API_TOKEN is not set.\nPlease set it in /mnt/onboard/.kobo/.adds/kscribbler/config.env\n",
+		)
 	}
 
 	if devDBPath := os.Getenv("KSCRIBBLER_DB_PATH"); devDBPath != "" {
@@ -413,7 +424,13 @@ func (entry Bookmark) postEntry(
 ) error {
 	isUploaded, err := entry.hasBeenUploaded(db)
 	if err != nil {
-		log.Fatalf("failed to check if entry has been uploaded: %v", err)
+		log.Printf("failed to check if entry has been uploaded: %v", err)
+		log.Printf(
+			"------\nBookMarkID: %s\nBookmarkType %s\n------\n",
+			entry.BookmarkID,
+			entry.Type,
+		)
+		return err
 	}
 	if isUploaded {
 		log.Printf("Entry has already been uploaded, skipping: %s", entry.BookmarkID)
@@ -429,6 +446,7 @@ func (entry Bookmark) postEntry(
 	if entry.Type == "annotation" {
 		hardcoverType = "note"
 		entryText = fmt.Sprintf("%s\n\n============\n\n%s", quote, annotation)
+		return nil // skip for now because hardcover api has multiline formatting issues
 	}
 
 	entryText = strings.ReplaceAll(entryText, `"""`, `\"\"\"`)
@@ -461,35 +479,56 @@ func (entry Bookmark) postEntry(
 
 }
 
+// http client with embedded CA bundle for api.hardcover.app
+func newHTTPClient() (*http.Client, error) {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(hardcoverCert) {
+		return nil, fmt.Errorf("failed to parse embedded CA bundle")
+	}
+	tlsConfig := &tls.Config{
+		RootCAs: pool,
+	}
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	return &http.Client{Transport: transport}, nil
+}
+
 func main() {
 
 	defer db.Close()
 	ctx := context.Background()
 
-	client := &http.Client{}
-	currentBook.koboToHardcover(client, ctx)
-	fmt.Println(currentBook.Bookmarks[0])
-
-	err := currentBook.Bookmarks[0].postEntry(
-		client,
-		ctx,
-		currentBook.Hardcover.BookID,
-		false,
-		currentBook.Hardcover.PrivacyLevel,
-	)
-
+	client, err := newHTTPClient()
 	if err != nil {
-		log.Printf("There was an error uploading quote to reading journal: %s\n", err)
+		log.Fatalf("Failed to create HTTP client: %v", err)
 	}
+
+	currentBook.koboToHardcover(client, ctx)
+
+	for _, bm := range currentBook.Bookmarks {
+		err := bm.postEntry(
+			client,
+			ctx,
+			currentBook.Hardcover.BookID,
+			false,
+			currentBook.Hardcover.PrivacyLevel,
+		)
+
+		if err != nil {
+			log.Printf("There was an error uploading quote to reading journal: %s\n", err)
+		}
+	}
+	log.Printf("Finished uploading bookmarks for %s to hardcover", currentBook.ContentID)
 }
 
 // next steps
 // maybe parse annotations starting with kscribbler.config - <directive>
-// construct annotations with base
-// long term logging
-// how tf to install the program
 // how to trigger the program
 // actually write tests (maybe)
 // organize this mess
 // validate that the isbn matched an existing book in hardcover
 // better marking of uploaded
+// version command/flag
+// how update
+// remove isbn/ other directives from bookmark struct when it gets deleted from the db. new type?
+// make sure quotes appear in order
+// make the book title available

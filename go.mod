@@ -4,6 +4,7 @@ go 1.24.2
 
 require (
 	github.com/jmoiron/sqlx v1.4.0
+	github.com/joho/godotenv v1.5.1
 	modernc.org/sqlite v1.37.0
 )
 
