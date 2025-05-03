@@ -23,6 +23,7 @@ var currentBook Book
 var authToken string
 var dbPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 
+
 type PrivacyLevel int
 
 const (
@@ -194,6 +195,7 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 		}
 
 		// Delete the bookmark after updating
+		//TODO: DELETE THIS FROM THE STRUCT
 		_, err = db.Exec(`
 			DELETE FROM Bookmark
 			WHERE BookmarkID = ?
@@ -413,7 +415,13 @@ func (entry Bookmark) postEntry(
 ) error {
 	isUploaded, err := entry.hasBeenUploaded(db)
 	if err != nil {
-		log.Fatalf("failed to check if entry has been uploaded: %v", err)
+		log.Printf("failed to check if entry has been uploaded: %v", err)
+		log.Printf(
+			"------\nBookMarkID: %s\nBookmarkType %s\n------\n",
+			entry.BookmarkID,
+			entry.Type,
+		)
+		return err
 	}
 	if isUploaded {
 		log.Printf("Entry has already been uploaded, skipping: %s", entry.BookmarkID)
@@ -468,27 +476,27 @@ func main() {
 	ctx := context.Background()
 
 	client := &http.Client{}
+
 	currentBook.koboToHardcover(client, ctx)
-	fmt.Println(currentBook.Bookmarks[0])
 
-	err := currentBook.Bookmarks[0].postEntry(
-		client,
-		ctx,
-		currentBook.Hardcover.BookID,
-		false,
-		currentBook.Hardcover.PrivacyLevel,
-	)
+	for _, bm := range currentBook.Bookmarks {
+		err := bm.postEntry(
+			client,
+			ctx,
+			currentBook.Hardcover.BookID,
+			false,
+			currentBook.Hardcover.PrivacyLevel,
+		)
 
-	if err != nil {
-		log.Printf("There was an error uploading quote to reading journal: %s\n", err)
+		if err != nil {
+			log.Printf("There was an error uploading quote to reading journal: %s\n", err)
+		}
 	}
 }
 
 // next steps
 // maybe parse annotations starting with kscribbler.config - <directive>
-// construct annotations with base
 // long term logging
-// how tf to install the program
 // how to trigger the program
 // actually write tests (maybe)
 // organize this mess
