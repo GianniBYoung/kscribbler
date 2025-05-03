@@ -429,6 +429,7 @@ func (entry Bookmark) postEntry(
 	if entry.Type == "annotation" {
 		hardcoverType = "note"
 		entryText = fmt.Sprintf("%s\n\n============\n\n%s", quote, annotation)
+		return nil // skip for now because hardcover api has multiline formatting issues
 	}
 
 	entryText = strings.ReplaceAll(entryText, `"""`, `\"\"\"`)
