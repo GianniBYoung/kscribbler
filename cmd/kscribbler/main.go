@@ -41,6 +41,7 @@ const (
 
 type Book struct {
 	ContentID string         `db:"ContentID"`
+	Title     sql.NullString `db:"BookTitle"`
 	KoboISBN  sql.NullString `db:"ISBN"`
 	ISBN      simpleISBN.ISBN
 	Bookmarks []Bookmark
@@ -107,6 +108,7 @@ func (b Book) String() string {
 	}
 
 	result += "========== Book ==========\n"
+	result += fmt.Sprintf("Title: %s\n", b.Title.String)
 	result += fmt.Sprintf("ContentID: %s\n", b.ContentID)
 
 	result += fmt.Sprintf("ISBN: %s\n", b.ISBN)
@@ -247,7 +249,7 @@ func init() {
 	}
 
 	cidquery := `
-		SELECT c.ContentID, c.ISBN
+		SELECT c.ContentID, c.ISBN, c.BookTitle
 		FROM content c
 		WHERE c.ContentType = 6
 			AND c.DateLastRead IS NOT NULL
