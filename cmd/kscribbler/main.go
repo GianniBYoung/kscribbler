@@ -41,7 +41,7 @@ const (
 
 type Book struct {
 	ContentID string         `db:"ContentID"`
-	Title     sql.NullString `db:"BookTitle"`
+	Title     sql.NullString `db:"Title"`
 	KoboISBN  sql.NullString `db:"ISBN"`
 	ISBN      simpleISBN.ISBN
 	Bookmarks []Bookmark
@@ -164,24 +164,27 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 			continue
 		}
 
-		text := strings.TrimSpace(bm.Quote.String)
+		isbnCanidate := strings.TrimSpace(bm.Quote.String)
+		isbnCanidate = strings.ReplaceAll(isbnCanidate, " ", "")
 
 		// Ignore if the highlight is very long (user probably highlighted a sentence)
-		if len(text) > 45 {
+		if len(isbnCanidate) > 45 {
 			continue
 		}
 
 		var isbn *simpleISBN.ISBN
 		var err error
 		var match string
-		if isbn13Regex.MatchString(text) {
-			match = isbn13Regex.FindString(text)
-		} else if isbn10Regex.MatchString(text) {
-			match = isbn10Regex.FindString(text)
+		log.Println("Checking for ISBN in highlight:", isbnCanidate)
+		if isbn13Regex.MatchString(isbnCanidate) {
+			log.Println("Found ISBN-13")
+			match = isbn13Regex.FindString(isbnCanidate)
+		} else if isbn10Regex.MatchString(isbnCanidate) {
+			log.Println("Found ISBN-10")
+			match = isbn10Regex.FindString(isbnCanidate)
 		} else {
 			continue
 		}
-		log.Println("ISBN FOUND")
 		log.Println(match)
 
 		//potentially handle the fatal by removing problem quote?
@@ -195,8 +198,10 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 		_, err = db.Exec(`
 			UPDATE content
 			SET ISBN = ?
-			WHERE ContentID = ?
-		`, isbn.ISBN13Number, b.ContentID)
+			WHERE ContentID LIKE ?;
+		`, isbn.ISBN13Number, "%"+b.ContentID+"%")
+		log.Println("Updating content table with ISBN ->", isbn.ISBN13Number)
+		log.Println("ContentID:", b.ContentID)
 		if err != nil {
 			log.Printf("Failed to update ISBN for book: %v", err)
 			continue
@@ -249,7 +254,7 @@ func init() {
 	}
 
 	cidquery := `
-		SELECT c.ContentID, c.ISBN, c.BookTitle
+		SELECT c.ContentID, c.ISBN, c.Title
 		FROM content c
 		WHERE c.ContentType = 6
 			AND c.DateLastRead IS NOT NULL
@@ -257,6 +262,11 @@ func init() {
 		LIMIT 1;
 	`
 	err = db.Get(&currentBook, cidquery)
+	if strings.HasPrefix(currentBook.ContentID, "file://") {
+		currentBook.ContentID = currentBook.ContentID[len("file://"):]
+		log.Println("Stripped file:// from ContentID")
+		log.Println("Current Book ContentID:", currentBook.ContentID)
+	}
 
 	if err != nil {
 		log.Fatal("Error getting last opened ContentID:", err)
@@ -300,11 +310,10 @@ func init() {
 		if err != nil {
 			fmt.Printf("Error setting ISBN: %v", err)
 		}
-		fmt.Println(currentBook.ISBN)
 	}
 
 	currentBook.Hardcover.PrivacyLevel = 1 // public by default
-	// fmt.Println(currentBook)
+	fmt.Println(currentBook)
 }
 
 func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error) {
