@@ -159,7 +159,7 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 	isbn10Regex := regexp.MustCompile(`[0-9][-0-9]{8,12}[0-9Xx]`)
 	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
 
-	for _, bm := range b.Bookmarks {
+	for i, bm := range b.Bookmarks {
 		if !bm.Quote.Valid {
 			continue
 		}
@@ -208,7 +208,6 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 		}
 
 		// Delete the bookmark after updating
-		//TODO: DELETE THIS FROM THE STRUCT
 		_, err = db.Exec(`
 			DELETE FROM Bookmark
 			WHERE BookmarkID = ?
@@ -218,6 +217,7 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 		} else {
 			log.Printf("Deleted BookmarkID %s after extracting ISBN", bm.BookmarkID)
 		}
+		b.Bookmarks = append(b.Bookmarks[:i], b.Bookmarks[i+1:]...)
 
 		return err, true
 
