@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/GianniBYoung/simpleISBN"
@@ -195,11 +196,8 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 		b.ISBN = *isbn
 
 		// Update the content table with the found ISBN as isbn-13
-		_, err = db.Exec(`
-			UPDATE content
-			SET ISBN = ?
-			WHERE ContentID LIKE ?;
-		`, isbn.ISBN13Number, "%"+b.ContentID+"%")
+		updateString := "UPDATE content SET ISBN = ? WHERE ContentID LIKE ?;"
+		_, err = db.Exec(updateString, isbn.ISBN13Number, "%"+b.ContentID+"%")
 		log.Println("Updating content table with ISBN ->", isbn.ISBN13Number)
 		log.Println("ContentID:", b.ContentID)
 		if err != nil {
@@ -207,17 +205,8 @@ func (b *Book) SetIsbnFromHighlight() (error, bool) {
 			continue
 		}
 
-		// Delete the bookmark after updating
-		_, err = db.Exec(`
-			DELETE FROM Bookmark
-			WHERE BookmarkID = ?
-		`, bm.BookmarkID)
-		if err != nil {
-			log.Printf("Failed to delete Bookmark %s: %v", bm.BookmarkID, err)
-		} else {
-			log.Printf("Deleted BookmarkID %s after extracting ISBN", bm.BookmarkID)
-		}
-		b.Bookmarks = append(b.Bookmarks[:i], b.Bookmarks[i+1:]...)
+		// delete the bookmark from the list so we don't upload it
+		b.Bookmarks = slices.Delete(b.Bookmarks, i, i+1)
 
 		return err, true
 
