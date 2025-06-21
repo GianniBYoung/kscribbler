@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GianniBYoung/kscribbler/version"
 	"github.com/GianniBYoung/simpleISBN"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
@@ -493,6 +494,7 @@ func newHTTPClient() (*http.Client, error) {
 }
 
 func main() {
+	log.Printf("Kscribbler v%s\n", version.Version)
 
 	defer db.Close()
 	ctx := context.Background()
@@ -519,16 +521,3 @@ func main() {
 	}
 	log.Printf("Finished uploading bookmarks for %s to hardcover", currentBook.ContentID)
 }
-
-// next steps
-// maybe parse annotations starting with kscribbler.config - <directive>
-// how to trigger the program
-// actually write tests (maybe)
-// organize this mess
-// validate that the isbn matched an existing book in hardcover
-// better marking of uploaded
-// version command/flag
-// how update
-// remove isbn/ other directives from bookmark struct when it gets deleted from the db. new type?
-// make sure quotes appear in order
-// make the book title available
