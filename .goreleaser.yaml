@@ -1,12 +1,9 @@
 ---
 version: 2
-
 project_name: kscribbler
-
 before:
   hooks:
     - go mod tidy
-
 builds:
   - main: ./cmd/kscribbler
     binary: kscribbler
@@ -19,7 +16,10 @@ builds:
     env:
       - CGO_ENABLED=0
     ldflags:
-      - "-s -w"
+      - -s -w
+      - -X 'yourmodule/version.Version={{ .Version }}'
+      - -X 'yourmodule/version.Commit={{ .Commit }}'
+      - -X 'yourmodule/version.Date={{ .Date }}'
 archives:
   - id: kobo
     name_template: KoboRoot
@@ -32,9 +32,7 @@ archives:
         dst: ./
       - src: ./dist/kscribbler*/kscribbler
         dst: ./opt/bin
-
 release:
   draft: true
-
 checksum:
-  name_template: "checksums.txt"
+  name_template: checksums.txt
