@@ -1,1 +1,2 @@
-menu_item:reader:Kscribbler Sync:cmd_spawn:quiet:/opt/bin/kscribbler >> /mnt/onboard/.adds/kscribbler/kscribbler.log 2>&1
+menu_item:reader:Kscribbler Sync:nickel_misc:rescan_books
+  chain_success:cmd_spawn:quiet:/opt/bin/kscribbler >> /mnt/onboard/.adds/kscribbler/kscribbler.log 2>&1
