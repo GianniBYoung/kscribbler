@@ -157,17 +157,23 @@ func (b *Book) SetIsbn() error {
 	return nil
 }
 
-func (b *Book) SetIsbnFromHighlight() (error, bool) {
+// SetIsbnFromBook attempts to extract an ISBN from the book's highlights or notes beginning with `kscrib:`.
+func (b *Book) SetIsbnFromBook() (error, bool) {
 	isbn10Regex := regexp.MustCompile(`[0-9][-0-9]{8,12}[0-9Xx]`)
 	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
 
 	for i, bm := range b.Bookmarks {
-		if !bm.Quote.Valid {
+		if !bm.Annotation.Valid || !strings.Contains(bm.Annotation.String, "kscrib:") {
 			continue
 		}
 
-		isbnCanidate := strings.TrimSpace(bm.Quote.String)
+		var isbnCanidate string
+		if bm.Type == "note" {
+			isbnCanidate = strings.TrimSpace(bm.Annotation.String)
+		}
+
 		isbnCanidate = strings.ReplaceAll(isbnCanidate, " ", "")
+		isbnCanidate = strings.ReplaceAll(isbnCanidate, "kscrib:", "")
 
 		// Ignore if the highlight is very long (user probably highlighted a sentence)
 		if len(isbnCanidate) > 45 {
@@ -288,7 +294,7 @@ func init() {
 
 	if currentBook.KoboISBN.Valid == false {
 		log.Println("Attempting to set isbn from highlights")
-		err, isbnFound := currentBook.SetIsbnFromHighlight()
+		err, isbnFound := currentBook.SetIsbnFromBook()
 		if err != nil || isbnFound == false {
 			log.Println(err)
 			log.Fatal(
@@ -466,7 +472,6 @@ func (entry Bookmark) postEntry(
 	bodyBytes, _ := json.Marshal(reqBody)
 	req, err := newHardcoverRequest(ctx, bodyBytes)
 
-	// resp, err := client.Do(req)
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Error with post response %s", err)
