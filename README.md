@@ -5,7 +5,7 @@ Sync your Kobo highlights to [hardcover.app](https://hardcover.app)!
 *K* - Kobo|kepub
 *Scribe* - Someone who writes stuff to a new location
 
-ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcover.app/@countmancy) 
+ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcover.app/@countmancy?referrer_id=28377) 
 
 ## Installation
 
