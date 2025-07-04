@@ -170,9 +170,12 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 		var isbnCanidate string
 		if bm.Type == "note" {
 			isbnCanidate = strings.TrimSpace(bm.Annotation.String)
+		} else {
+			isbnCanidate = strings.TrimSpace(bm.Quote.String)
 		}
 
 		isbnCanidate = strings.ReplaceAll(isbnCanidate, " ", "")
+		isbnCanidate = strings.ToLower(isbnCanidate)
 		isbnCanidate = strings.ReplaceAll(isbnCanidate, "kscrib:", "")
 
 		// Ignore if the highlight is very long (user probably highlighted a sentence)
@@ -183,7 +186,7 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 		var isbn *simpleISBN.ISBN
 		var err error
 		var match string
-		log.Println("Checking for ISBN in highlight:", isbnCanidate)
+		log.Println("Checking for ISBN in: ", isbnCanidate)
 		if isbn13Regex.MatchString(isbnCanidate) {
 			log.Println("Found ISBN-13")
 			match = isbn13Regex.FindString(isbnCanidate)
@@ -198,7 +201,7 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 		//potentially handle the fatal by removing problem quote?
 		isbn, err = simpleISBN.NewISBN(match)
 		if err != nil {
-			log.Fatalf("ISBN matched from highlight but failed to parse:\n%s\n%s", match, err)
+			log.Fatalf("ISBN matched from highlight/note but failed to parse:\n%s\n%s", match, err)
 		}
 		b.ISBN = *isbn
 
@@ -293,12 +296,12 @@ func init() {
 	}
 
 	if currentBook.KoboISBN.Valid == false {
-		log.Println("Attempting to set isbn from highlights")
+		log.Println("Attempting to set isbn from highlights and notes")
 		err, isbnFound := currentBook.SetIsbnFromBook()
 		if err != nil || isbnFound == false {
 			log.Println(err)
 			log.Fatal(
-				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscribbler:config:ISBN-xxxxxx`",
+				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscrib:isbn-xxxxxx`",
 			)
 		}
 	} else {
@@ -385,7 +388,7 @@ func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 
 	if len(findBookResp.Data.Books) < 1 || len(findBookResp.Data.Books[0].Editions) < 1 {
 		log.Fatalf(
-			"Unable to ID Books from ISBN.ISBN10Number: %s, ISBN.ISBN13Number: %s",
+			"Unable to ID Books from ISBN\n ISBN10: %s\nISBN13: %s",
 			book.ISBN.ISBN10Number,
 			book.ISBN.ISBN13Number,
 		)
