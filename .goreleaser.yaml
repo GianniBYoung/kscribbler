@@ -17,9 +17,9 @@ builds:
       - CGO_ENABLED=0
     ldflags:
       - -s -w
-      - -X 'yourmodule/version.Version={{ .Version }}'
-      - -X 'yourmodule/version.Commit={{ .Commit }}'
-      - -X 'yourmodule/version.Date={{ .Date }}'
+      - -X 'kscribbler/version.Version={{ .Version }}'
+      - -X 'kscribbler/version.Commit={{ .Commit }}'
+      - -X 'kscribbler/version.Date={{ .Date }}'
 archives:
   - id: kobo
     name_template: KoboRoot
