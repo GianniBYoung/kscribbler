@@ -163,7 +163,8 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
 
 	for i, bm := range b.Bookmarks {
-		if !bm.Annotation.Valid || !strings.Contains(bm.Annotation.String, "kscrib:") {
+		if !bm.Annotation.Valid ||
+			!strings.Contains(bm.Annotation.String, strings.ToLower("kscrib:")) {
 			continue
 		}
 
@@ -173,13 +174,22 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 		} else {
 			isbnCanidate = strings.TrimSpace(bm.Quote.String)
 		}
-
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, " ", "")
 		isbnCanidate = strings.ToLower(isbnCanidate)
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, "kscrib:", "")
+
+		var isbnCleaner = strings.NewReplacer(
+			" ", "",
+			"-", "",
+			"isbn", "",
+			"(", "",
+			")", "",
+			"e-book", "",
+			"ebook", "",
+			"kscrib:", "",
+		)
+		isbnCanidate = isbnCleaner.Replace(isbnCanidate)
 
 		// Ignore if the highlight is very long (user probably highlighted a sentence)
-		if len(isbnCanidate) > 45 {
+		if len(isbnCanidate) > 55 {
 			continue
 		}
 
@@ -216,6 +226,13 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 		}
 
 		// delete the bookmark from the list so we don't upload it
+		markAsUploadedErr := b.Bookmarks[i].markAsUploaded()
+		if markAsUploadedErr != nil {
+			log.Printf(
+				"Failed to mark isbn highlight as uploaded: %v\ncontinuing...",
+				markAsUploadedErr,
+			)
+		}
 		b.Bookmarks = slices.Delete(b.Bookmarks, i, i+1)
 
 		return err, true
@@ -295,10 +312,10 @@ func init() {
 		os.Exit(0)
 	}
 
-	if currentBook.KoboISBN.Valid == false {
+	if !currentBook.KoboISBN.Valid {
 		log.Println("Attempting to set isbn from highlights and notes")
 		err, isbnFound := currentBook.SetIsbnFromBook()
-		if err != nil || isbnFound == false {
+		if err != nil || !isbnFound {
 			log.Println(err)
 			log.Fatal(
 				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscrib:isbn-xxxxxx`",
@@ -474,6 +491,9 @@ func (entry Bookmark) postEntry(
 	reqBody := map[string]string{"query": mutation}
 	bodyBytes, _ := json.Marshal(reqBody)
 	req, err := newHardcoverRequest(ctx, bodyBytes)
+	if err != nil {
+		log.Printf("Error with request creation %v", err)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -483,9 +503,12 @@ func (entry Bookmark) postEntry(
 
 	rawResp, _ := io.ReadAll(resp.Body)
 	fmt.Println("Hardcover response:", string(rawResp))
-	entry.markAsUploaded()
-	return nil
+	err = entry.markAsUploaded()
+	if err != nil {
+		log.Printf("Failed to mark entry as uploaded: %v", err)
+	}
 
+	return nil
 }
 
 // http client with embedded CA bundle for api.hardcover.app
