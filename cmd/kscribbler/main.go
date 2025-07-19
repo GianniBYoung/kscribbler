@@ -491,6 +491,9 @@ func (entry Bookmark) postEntry(
 	reqBody := map[string]string{"query": mutation}
 	bodyBytes, _ := json.Marshal(reqBody)
 	req, err := newHardcoverRequest(ctx, bodyBytes)
+	if err != nil {
+		log.Printf("Error with request creation %v", err)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -500,9 +503,12 @@ func (entry Bookmark) postEntry(
 
 	rawResp, _ := io.ReadAll(resp.Body)
 	fmt.Println("Hardcover response:", string(rawResp))
-	entry.markAsUploaded()
-	return nil
+	err = entry.markAsUploaded()
+	if err != nil {
+		log.Printf("Failed to mark entry as uploaded: %v", err)
+	}
 
+	return nil
 }
 
 // http client with embedded CA bundle for api.hardcover.app
