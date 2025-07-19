@@ -163,7 +163,8 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
 
 	for i, bm := range b.Bookmarks {
-		if !bm.Annotation.Valid || !strings.Contains(bm.Annotation.String, "kscrib:") {
+		if !bm.Annotation.Valid ||
+			!strings.Contains(bm.Annotation.String, strings.ToLower("kscrib:")) {
 			continue
 		}
 
@@ -174,12 +175,20 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 			isbnCanidate = strings.TrimSpace(bm.Quote.String)
 		}
 
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, " ", "")
+		// block block block
 		isbnCanidate = strings.ToLower(isbnCanidate)
+		isbnCanidate = strings.ReplaceAll(isbnCanidate, " ", "")
+		isbnCanidate = strings.ReplaceAll(isbnCanidate, "-", "")
+		isbnCanidate = strings.ReplaceAll(isbnCanidate, "isbn", "")
+		isbnCanidate = strings.ReplaceAll(isbnCanidate, "(", "")
+		isbnCanidate = strings.ReplaceAll(isbnCanidate, ")", "")
+		isbnCanidate = strings.ReplaceAll(isbnCanidate, "ebook", "")
+		isbnCanidate = strings.ReplaceAll(isbnCanidate, "e-book", "")
 		isbnCanidate = strings.ReplaceAll(isbnCanidate, "kscrib:", "")
+		// smorc smorc smorc
 
 		// Ignore if the highlight is very long (user probably highlighted a sentence)
-		if len(isbnCanidate) > 45 {
+		if len(isbnCanidate) > 55 {
 			continue
 		}
 
