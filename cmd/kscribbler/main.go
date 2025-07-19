@@ -312,10 +312,10 @@ func init() {
 		os.Exit(0)
 	}
 
-	if currentBook.KoboISBN.Valid == false {
+	if !currentBook.KoboISBN.Valid {
 		log.Println("Attempting to set isbn from highlights and notes")
 		err, isbnFound := currentBook.SetIsbnFromBook()
-		if err != nil || isbnFound == false {
+		if err != nil || !isbnFound {
 			log.Println(err)
 			log.Fatal(
 				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscrib:isbn-xxxxxx`",
