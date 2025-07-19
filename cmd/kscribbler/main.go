@@ -174,18 +174,19 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 		} else {
 			isbnCanidate = strings.TrimSpace(bm.Quote.String)
 		}
-
-		// block block block
 		isbnCanidate = strings.ToLower(isbnCanidate)
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, " ", "")
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, "-", "")
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, "isbn", "")
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, "(", "")
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, ")", "")
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, "ebook", "")
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, "e-book", "")
-		isbnCanidate = strings.ReplaceAll(isbnCanidate, "kscrib:", "")
-		// smorc smorc smorc
+
+		var isbnCleaner = strings.NewReplacer(
+			" ", "",
+			"-", "",
+			"isbn", "",
+			"(", "",
+			")", "",
+			"e-book", "",
+			"ebook", "",
+			"kscrib:", "",
+		)
+		isbnCanidate = isbnCleaner.Replace(isbnCanidate)
 
 		// Ignore if the highlight is very long (user probably highlighted a sentence)
 		if len(isbnCanidate) > 55 {
