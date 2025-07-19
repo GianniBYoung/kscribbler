@@ -474,7 +474,7 @@ func (entry Bookmark) postEntry(
 		hardcoverType = "annotation"
 		entryText = fmt.Sprintf("%s\n\n============\n\n%s", quote, annotation)
 		fmt.Println(
-			"Skiping annotation upload until hardcover's api has better multiline support",
+			"Skipping annotation upload until hardcover's api has better multiline support",
 			entryText,
 		)
 		return nil // skip for now because hardcover api has multiline formatting issues
