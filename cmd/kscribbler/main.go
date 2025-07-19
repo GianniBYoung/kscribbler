@@ -226,6 +226,13 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 		}
 
 		// delete the bookmark from the list so we don't upload it
+		markAsUploadedErr := b.Bookmarks[i].markAsUploaded()
+		if markAsUploadedErr != nil {
+			log.Printf(
+				"Failed to mark isbn highlight as uploaded: %v\ncontinuing...",
+				markAsUploadedErr,
+			)
+		}
 		b.Bookmarks = slices.Delete(b.Bookmarks, i, i+1)
 
 		return err, true
