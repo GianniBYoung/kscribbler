@@ -225,7 +225,6 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 			continue
 		}
 
-		// delete the bookmark from the list so we don't upload it
 		markAsUploadedErr := b.Bookmarks[i].markAsUploaded()
 		if markAsUploadedErr != nil {
 			log.Printf(
@@ -233,6 +232,7 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 				markAsUploadedErr,
 			)
 		}
+		// delete the bookmark from the list so we don't upload it
 		b.Bookmarks = slices.Delete(b.Bookmarks, i, i+1)
 
 		return err, true
