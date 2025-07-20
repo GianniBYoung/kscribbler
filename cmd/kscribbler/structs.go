@@ -30,7 +30,7 @@ type Book struct {
 	Hardcover Hardcover
 }
 
-// Represents the KoboReader.sqlite for a qute or annotation.
+// Represents the KoboReader.sqlite for a quote or annotation.
 type Bookmark struct {
 	BookmarkID         string         `db:"BookmarkID"`
 	ContentID          string         `db:"ContentID"`
