@@ -34,7 +34,6 @@ type Book struct {
 type Bookmark struct {
 	BookmarkID         string         `db:"BookmarkID"`
 	ContentID          string         `db:"ContentID"`
-	ChapterProgress    float64        `db:"ChapterProgress"`
 	Quote              sql.NullString `db:"Text"`
 	Annotation         sql.NullString `db:"Annotation"`
 	Type               string         `db:"Type"`

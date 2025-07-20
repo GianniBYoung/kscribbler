@@ -29,39 +29,32 @@ var dbPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 func (b Book) String() string {
 	var result string
 
-	result += "\n-- Bookmarks --\n"
+	result += "\n========== Book ==========\n"
+	result += fmt.Sprintf("Title: %s\n", b.Title.String)
+	result += fmt.Sprintf("ContentID: %s\n", b.ContentID)
+	result += fmt.Sprintf("ISBN: %s", b.ISBN)
+
+	result += "\n===== Hardcover Info =====\n"
+	result += fmt.Sprintf("BookID: %d\n", b.Hardcover.BookID)
+	result += fmt.Sprintf("EditionID: %d\n", b.Hardcover.EditionID)
+	result += fmt.Sprintf("PrivacyLevel: %d\n", b.Hardcover.PrivacyLevel)
+
+	result += "\n======== Bookmarks ========\n"
 	for i, bm := range b.Bookmarks {
 		result += fmt.Sprintf("[%d]\n", i+1)
 		result += fmt.Sprintf("Chapter Title: %s\n", bm.ChapterTitle.String)
 		result += fmt.Sprintf("BookmarkID: %s\n", bm.BookmarkID)
-		result += fmt.Sprintf("Chapter Progress: %.2f%%\n", bm.ChapterProgress*100)
+		result += fmt.Sprintf("Type: %s\n", bm.Type)
 
 		if bm.Quote.Valid {
 			result += fmt.Sprintf("Quote: %s\n", bm.Quote.String)
-		} else {
-			result += "Quote: (none)\n"
 		}
-
 		if bm.Annotation.Valid {
 			result += fmt.Sprintf("Annotation: %s\n", bm.Annotation.String)
-		} else {
-			result += "Annotation: (none)\n"
 		}
 
-		result += fmt.Sprintf("Type: %s\n", bm.Type)
 		result += "--------------------------\n"
 	}
-
-	result += "========== Book ==========\n"
-	result += fmt.Sprintf("Title: %s\n", b.Title.String)
-	result += fmt.Sprintf("ContentID: %s\n", b.ContentID)
-
-	result += fmt.Sprintf("ISBN: %s\n", b.ISBN)
-
-	result += "\n-- Hardcover Info --\n"
-	result += fmt.Sprintf("BookID: %d\n", b.Hardcover.BookID)
-	result += fmt.Sprintf("EditionID: %d\n", b.Hardcover.EditionID)
-	result += fmt.Sprintf("PrivacyLevel: %d\n", b.Hardcover.PrivacyLevel)
 
 	return result
 }
@@ -413,7 +406,6 @@ func init() {
 	SELECT
 	b.BookmarkID,
 	b.ContentID,
-	b.ChapterProgress,
 	b.Text,
 	b.Annotation,
 	b.Type,
