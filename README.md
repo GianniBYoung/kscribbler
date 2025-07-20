@@ -37,8 +37,9 @@ The quotes are uploaded to hardcover.app based on the book's ISBN. See the note 
 - If you are having issues with the quotes not being uploaded, check that hardcover.app has an edition for the ISBN.
 - This project depends on the `KoboReader.sqlite` database to be up to date. This typically means a successful sync is required for the DB to actually write from memory to disk.
   - This leads to some annoying timing issues. I would recommend running the program after a sync and reboot if you are having trouble uploading quotes.
-- For the savy the sqlite db is located at`/mnt/onboard/.kobo/KoboReader.sqlite`
+- For the savvy the sqlite db is located at`/mnt/onboard/.kobo/KoboReader.sqlite`
   - You can modify this database to add an ISBN to a book if you know what you're doing
+  - `telnet/ssh` into the kobo is possible and allows for manually running `kscribbler` if so desired
 
 ## Contributing
 - File bug reports
