@@ -1,11 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -29,100 +25,41 @@ var currentBook Book
 var authToken string
 var dbPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 
-//go:embed certs/hardcover.pem
-var hardcoverCert []byte
-
-type PrivacyLevel int
-
-const (
-	PrivacyPublic    PrivacyLevel = 1
-	PrivacyFollowers PrivacyLevel = 2
-	PrivacyPrivate   PrivacyLevel = 3
-	apiURL                        = "https://api.hardcover.app/v1/graphql"
-)
-
-type Book struct {
-	ContentID string         `db:"ContentID"`
-	Title     sql.NullString `db:"Title"`
-	KoboISBN  sql.NullString `db:"ISBN"`
-	ISBN      simpleISBN.ISBN
-	Bookmarks []Bookmark
-	Hardcover Hardcover
-}
-
-type Hardcover struct {
-	BookID       int
-	EditionID    int
-	PrivacyLevel PrivacyLevel
-}
-
-// a single book will have multiple bookmarks(quotes|notes) with unique BookmarkIDs
-type Bookmark struct {
-	BookmarkID         string         `db:"BookmarkID"`
-	ContentID          string         `db:"ContentID"`
-	ChapterProgress    float64        `db:"ChapterProgress"`
-	Quote              sql.NullString `db:"Text"`
-	Annotation         sql.NullString `db:"Annotation"`
-	Type               string         `db:"Type"`
-	ChapterTitle       sql.NullString `db:"ChapterTitle"`
-	KscribblerUploaded bool           `db:"KscribblerUploaded"`
-}
-
-type Response struct {
-	Data struct {
-		Books []struct {
-			ID       int    `json:"id"`
-			Title    string `json:"title"`
-			Editions []struct {
-				ID int `json:"id"`
-			} `json:"editions"`
-		} `json:"books"`
-		InsertReadingJournal struct {
-			Errors *string `json:"errors"`
-		} `json:"insert_reading_journal"`
-	} `json:"data"`
-}
-
+// Print info about the book and its bookmarks
 func (b Book) String() string {
 	var result string
 
-	result += "\n-- Bookmarks --\n"
-	for i, bm := range b.Bookmarks {
-		result += fmt.Sprintf("[%d]\n", i+1)
-		result += fmt.Sprintf("Chapter Title: %s\n", bm.ChapterTitle.String)
-		result += fmt.Sprintf("BookmarkID: %s\n", bm.BookmarkID)
-		result += fmt.Sprintf("Chapter Progress: %.2f%%\n", bm.ChapterProgress*100)
-
-		if bm.Quote.Valid {
-			result += fmt.Sprintf("Quote: %s\n", bm.Quote.String)
-		} else {
-			result += "Quote: (none)\n"
-		}
-
-		if bm.Annotation.Valid {
-			result += fmt.Sprintf("Annotation: %s\n", bm.Annotation.String)
-		} else {
-			result += "Annotation: (none)\n"
-		}
-
-		result += fmt.Sprintf("Type: %s\n", bm.Type)
-		result += "--------------------------\n"
-	}
-
-	result += "========== Book ==========\n"
+	result += "\n========== Book ==========\n"
 	result += fmt.Sprintf("Title: %s\n", b.Title.String)
 	result += fmt.Sprintf("ContentID: %s\n", b.ContentID)
+	result += fmt.Sprintf("ISBN: %s", b.ISBN)
 
-	result += fmt.Sprintf("ISBN: %s\n", b.ISBN)
-
-	result += "\n-- Hardcover Info --\n"
+	result += "\n===== Hardcover Info =====\n"
 	result += fmt.Sprintf("BookID: %d\n", b.Hardcover.BookID)
 	result += fmt.Sprintf("EditionID: %d\n", b.Hardcover.EditionID)
 	result += fmt.Sprintf("PrivacyLevel: %d\n", b.Hardcover.PrivacyLevel)
 
+	result += "\n======== Bookmarks ========\n"
+	for i, bm := range b.Bookmarks {
+		result += fmt.Sprintf("[%d]\n", i+1)
+		result += fmt.Sprintf("Chapter Title: %s\n", bm.ChapterTitle.String)
+		result += fmt.Sprintf("BookmarkID: %s\n", bm.BookmarkID)
+		result += fmt.Sprintf("Type: %s\n", bm.Type)
+
+		if bm.Quote.Valid {
+			result += fmt.Sprintf("Quote: %s\n", bm.Quote.String)
+		}
+		if bm.Annotation.Valid {
+			result += fmt.Sprintf("Annotation: %s\n", bm.Annotation.String)
+		}
+
+		result += "--------------------------\n"
+	}
+
 	return result
 }
 
+// Modifies the database to ensure the KscribblerUploaded column exists in the Bookmark table.
 func ensureKscribblerUploadedColumn(db *sqlx.DB) error {
 	var count int
 	err := db.Get(&count, `
@@ -148,6 +85,7 @@ func ensureKscribblerUploadedColumn(db *sqlx.DB) error {
 	return nil
 }
 
+// Sets the ISBN field of the Book struct using the KoboISBN field.
 func (b *Book) SetIsbn() error {
 	isbn, err := simpleISBN.NewISBN(b.KoboISBN.String)
 	if err != nil {
@@ -157,7 +95,7 @@ func (b *Book) SetIsbn() error {
 	return nil
 }
 
-// SetIsbnFromBook attempts to extract an ISBN from the book's highlights or notes beginning with `kscrib:`.
+// Attempts to extract an ISBN from the book's highlights or notes beginning with `kscrib:`.
 func (b *Book) SetIsbnFromBook() (error, bool) {
 	isbn10Regex := regexp.MustCompile(`[0-9][-0-9]{8,12}[0-9Xx]`)
 	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
@@ -239,107 +177,6 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 
 	}
 	return nil, false
-}
-
-func init() {
-
-	godotenv.Load("/mnt/onboard/.adds/kscribbler/config.env")
-	authToken = os.Getenv("HARDCOVER_API_TOKEN")
-	if authToken == "" {
-		log.Fatalf(
-			"HARDCOVER_API_TOKEN is not set.\nPlease set it in /mnt/onboard/.kobo/.adds/kscribbler/config.env\n",
-		)
-	}
-
-	if devDBPath := os.Getenv("KSCRIBBLER_DB_PATH"); devDBPath != "" {
-		dbPath = devDBPath
-	}
-
-	var err error
-	db, err = sqlx.Open("sqlite", dbPath)
-
-	if err != nil {
-		log.Print("Error opening database")
-		log.Fatal(err)
-	}
-
-	err = ensureKscribblerUploadedColumn(db)
-	if err != nil {
-		log.Println("error creating KscribblerUploaded column")
-		log.Fatal(err)
-	}
-
-	cidquery := `
-		SELECT c.ContentID, c.ISBN, c.Title
-		FROM content c
-		WHERE c.ContentType = 6
-			AND c.DateLastRead IS NOT NULL
-		ORDER BY c.DateLastRead DESC
-		LIMIT 1;
-	`
-	err = db.Get(&currentBook, cidquery)
-	if strings.HasPrefix(currentBook.ContentID, "file://") {
-		currentBook.ContentID = currentBook.ContentID[len("file://"):]
-		log.Println("Stripped file:// from ContentID")
-		log.Println("Current Book ContentID:", currentBook.ContentID)
-	}
-
-	if err != nil {
-		log.Fatal("Error getting last opened ContentID:", err)
-	}
-
-	err = db.Select(&currentBook.Bookmarks, `
-	SELECT
-	b.BookmarkID,
-	b.ContentID,
-	b.ChapterProgress,
-	b.Text,
-	b.Annotation,
-	b.Type,
-	c.Title AS ChapterTitle
-	FROM Bookmark b
-	LEFT JOIN content c ON b.ContentID = c.ContentID
-	WHERE b.ContentID LIKE ?
-	AND b.Type != 'dogear'
-	AND b.Text IS NOT NULL;
-	`, currentBook.ContentID+"%")
-
-	if err != nil {
-		log.Fatal("Error getting bookmarks:", err)
-	}
-	if len(currentBook.Bookmarks) == 0 {
-		log.Println("Exiting. No highlights found")
-		os.Exit(0)
-	}
-
-	if !currentBook.KoboISBN.Valid {
-		log.Println("Attempting to set isbn from highlights and notes")
-		err, isbnFound := currentBook.SetIsbnFromBook()
-		if err != nil || !isbnFound {
-			log.Println(err)
-			log.Fatal(
-				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscrib:isbn-xxxxxx`",
-			)
-		}
-	} else {
-		err = currentBook.SetIsbn()
-		if err != nil {
-			fmt.Printf("Error setting ISBN: %v", err)
-		}
-	}
-
-	currentBook.Hardcover.PrivacyLevel = 1 // public by default
-	fmt.Println(currentBook)
-}
-
-func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", authToken)
-	req.Header.Set("Content-Type", "application/json")
-	return req, nil
 }
 
 // flesh out struct and associte book to hardcover
@@ -515,22 +352,103 @@ func (entry Bookmark) postEntry(
 	return nil
 }
 
-// http client with embedded CA bundle for api.hardcover.app
-func newHTTPClient() (*http.Client, error) {
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(hardcoverCert) {
-		return nil, fmt.Errorf("failed to parse embedded CA bundle")
+// Initializes the environment, database, and retrieves the last opened book and its bookmarks.
+// This has a timing issue since the last opened book depends on when the KoboReader.sqlite database was last updated which may not be immediate after a book is opened.
+func init() {
+	log.Printf("Kscribbler v%s\n", version.Version)
+
+	godotenv.Load("/mnt/onboard/.adds/kscribbler/config.env")
+	authToken = os.Getenv("HARDCOVER_API_TOKEN")
+	if authToken == "" {
+		log.Fatalf(
+			"HARDCOVER_API_TOKEN is not set.\nPlease set it in /mnt/onboard/.kobo/.adds/kscribbler/config.env\n",
+		)
 	}
-	tlsConfig := &tls.Config{
-		RootCAs: pool,
+
+	if devDBPath := os.Getenv("KSCRIBBLER_DB_PATH"); devDBPath != "" {
+		dbPath = devDBPath
 	}
-	transport := &http.Transport{TLSClientConfig: tlsConfig}
-	return &http.Client{Transport: transport}, nil
+
+	var err error
+	db, err = sqlx.Open("sqlite", dbPath)
+
+	if err != nil {
+		log.Print("Error opening database")
+		log.Fatal(err)
+	}
+
+	err = ensureKscribblerUploadedColumn(db)
+	if err != nil {
+		log.Println("error creating KscribblerUploaded column")
+		log.Fatal(err)
+	}
+
+	cidquery := `
+		SELECT c.ContentID, c.ISBN, c.Title
+		FROM content c
+		WHERE c.ContentType = 6
+			AND c.DateLastRead IS NOT NULL
+		ORDER BY c.DateLastRead DESC
+		LIMIT 1;
+	`
+	err = db.Get(&currentBook, cidquery)
+	if strings.HasPrefix(currentBook.ContentID, "file://") {
+		currentBook.ContentID = currentBook.ContentID[len("file://"):]
+		log.Println("Stripped file:// from ContentID")
+		log.Println("Current Book ContentID:", currentBook.ContentID)
+	}
+
+	if err != nil {
+		log.Fatal("Error getting last opened ContentID:", err)
+	}
+
+	err = db.Select(&currentBook.Bookmarks, `
+		SELECT
+			b.BookmarkID,
+			b.ContentID,
+			b.Text,
+			b.Annotation,
+			b.Type,
+			c.Title AS ChapterTitle
+		FROM
+			Bookmark b
+		LEFT JOIN
+			content c ON b.ContentID = c.ContentID
+		WHERE
+			b.ContentID LIKE ?
+			AND b.Type != 'dogear'
+			AND b.Text IS NOT NULL;
+	`, currentBook.ContentID+"%")
+
+	if err != nil {
+		log.Fatal("Error getting bookmarks:", err)
+	}
+	if len(currentBook.Bookmarks) == 0 {
+		log.Println("Exiting. No highlights found")
+		os.Exit(0)
+	}
+
+	if !currentBook.KoboISBN.Valid {
+		log.Println("Attempting to set isbn from highlights and notes")
+		err, isbnFound := currentBook.SetIsbnFromBook()
+		if err != nil || !isbnFound {
+			log.Println(err)
+			log.Fatal(
+				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscrib:isbn-xxxxxx`",
+			)
+		}
+	} else {
+		err = currentBook.SetIsbn()
+		if err != nil {
+			fmt.Printf("Error setting ISBN: %v", err)
+		}
+	}
+
+	currentBook.Hardcover.PrivacyLevel = 1 // public by default
+	fmt.Println(currentBook)
 }
 
 func main() {
-	log.Printf("Kscribbler v%s\n", version.Version)
-
 	defer db.Close()
 	ctx := context.Background()
 
