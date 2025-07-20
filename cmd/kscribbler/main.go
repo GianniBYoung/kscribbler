@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -29,59 +28,7 @@ var currentBook Book
 var authToken string
 var dbPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 
-//go:embed certs/hardcover.pem
-var hardcoverCert []byte
-
-type PrivacyLevel int
-
-const (
-	PrivacyPublic    PrivacyLevel = 1
-	PrivacyFollowers PrivacyLevel = 2
-	PrivacyPrivate   PrivacyLevel = 3
-	apiURL                        = "https://api.hardcover.app/v1/graphql"
-)
-
-type Book struct {
-	ContentID string         `db:"ContentID"`
-	Title     sql.NullString `db:"Title"`
-	KoboISBN  sql.NullString `db:"ISBN"`
-	ISBN      simpleISBN.ISBN
-	Bookmarks []Bookmark
-	Hardcover Hardcover
-}
-
-type Hardcover struct {
-	BookID       int
-	EditionID    int
-	PrivacyLevel PrivacyLevel
-}
-
-// a single book will have multiple bookmarks(quotes|notes) with unique BookmarkIDs
-type Bookmark struct {
-	BookmarkID         string         `db:"BookmarkID"`
-	ContentID          string         `db:"ContentID"`
-	ChapterProgress    float64        `db:"ChapterProgress"`
-	Quote              sql.NullString `db:"Text"`
-	Annotation         sql.NullString `db:"Annotation"`
-	Type               string         `db:"Type"`
-	ChapterTitle       sql.NullString `db:"ChapterTitle"`
-	KscribblerUploaded bool           `db:"KscribblerUploaded"`
-}
-
-type Response struct {
-	Data struct {
-		Books []struct {
-			ID       int    `json:"id"`
-			Title    string `json:"title"`
-			Editions []struct {
-				ID int `json:"id"`
-			} `json:"editions"`
-		} `json:"books"`
-		InsertReadingJournal struct {
-			Errors *string `json:"errors"`
-		} `json:"insert_reading_journal"`
-	} `json:"data"`
-}
+const apiURL = "https://api.hardcover.app/v1/graphql"
 
 func (b Book) String() string {
 	var result string
