@@ -9,7 +9,7 @@ ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcov
 
 ## Installation
 1. Download and install [nickelmenu](https://pgaskin.net/NickelMenu)
-2. Download the latest release of `kscribbler` from the [releases page](https://github.com/GianniBYoung/kscribbler/releases)
+2. Download the latest release of `kscribbler` from the [releases page](https://github.com/GianniBYoung/kscribbler/releases/latest)
 3. Install `kscribbler` on your Kobo:
    - Connect your Kobo to your computer and mount the device
    - Navigate to the `.kobo` directory on your Kobo (might need to show hidden files)
