@@ -403,18 +403,21 @@ func init() {
 	}
 
 	err = db.Select(&currentBook.Bookmarks, `
-	SELECT
-	b.BookmarkID,
-	b.ContentID,
-	b.Text,
-	b.Annotation,
-	b.Type,
-	c.Title AS ChapterTitle
-	FROM Bookmark b
-	LEFT JOIN content c ON b.ContentID = c.ContentID
-	WHERE b.ContentID LIKE ?
-	AND b.Type != 'dogear'
-	AND b.Text IS NOT NULL;
+		SELECT
+			b.BookmarkID,
+			b.ContentID,
+			b.Text,
+			b.Annotation,
+			b.Type,
+			c.Title AS ChapterTitle
+		FROM
+			Bookmark b
+		LEFT JOIN
+			content c ON b.ContentID = c.ContentID
+		WHERE
+			b.ContentID LIKE ?
+			AND b.Type != 'dogear'
+			AND b.Text IS NOT NULL;
 	`, currentBook.ContentID+"%")
 
 	if err != nil {
