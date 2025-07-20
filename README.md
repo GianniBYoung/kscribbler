@@ -2,6 +2,10 @@
 
 Sync your Kobo highlights to [hardcover.app](https://hardcover.app)!
 
+Here is an [example](https://hardcover.app/books/crooked-kingdom/journals/@countmancy?referrer_id=28377) for the book Crooked Kingdom by Leigh Bardugo:
+
+
+
 *K* - Kobo|kepub
 *Scribe* - Someone who writes stuff to a new location
 
