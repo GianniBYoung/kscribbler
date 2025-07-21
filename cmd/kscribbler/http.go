@@ -33,7 +33,13 @@ func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("Authorization", authToken)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(
+		"User-Agent",
+		"kscribbler - https://github.com/GianniBYoung/kscribbler",
+	)
+
 	return req, nil
 }
