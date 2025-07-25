@@ -34,6 +34,7 @@ To save some battery and resources the sync is only ran against the current/last
 The quotes are uploaded to hardcover.app based on the book's ISBN. See the note below or the troubleshooting section if quotes are not being uploaded.
 
 - If your book doesn't have an ISBN saved to the kobo device's database you can highlight the book's ISBN on its copyright page and `kscribbler` will attempt to parse it and save it to the book's metadata.
+  - A note with `kscrib:<you isbn number with no angle brackets` can be added anywhere in the book to manually set the ISBN
   - Can be useful for sideloaded books
 
 ## Troubleshooting
