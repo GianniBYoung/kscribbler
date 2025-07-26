@@ -18,7 +18,11 @@ ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcov
    - Connect your Kobo to your computer and mount the device
    - Navigate to the `.kobo` directory on your Kobo (might need to show hidden files)
    - Copy the `KoboRoot.tgz` into this directory and unmount the device safely. This will trigger a reboot and upgrade.
-4. Remount the device and navigate to the `.adds/kscibbler` directory and add your hardcover token.
+4. Remount the device and navigate to `/mnt/onboard/.adds/kscribbler`.
+  - If you don't see this directory check for `/mnt/onboard/.adds/kscribbler`
+5. Copy the example config file and add your token:
+    - `cp config.env.example config.env`
+    - `vi config.env`
 
 ## Upgrade
 
