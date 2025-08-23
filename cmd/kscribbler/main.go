@@ -23,7 +23,7 @@ import (
 var db *sqlx.DB
 var currentBook Book
 var authToken string
-var dbPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
+var kobodbPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 
 // Print info about the book and its bookmarks
 func (b Book) String() string {
@@ -366,11 +366,11 @@ func init() {
 	}
 
 	if devDBPath := os.Getenv("KSCRIBBLER_DB_PATH"); devDBPath != "" {
-		dbPath = devDBPath
+		kobodbPath = devDBPath
 	}
 
 	var err error
-	db, err = sqlx.Open("sqlite", dbPath)
+	db, err = sqlx.Open("sqlite", kobodbPath)
 
 	if err != nil {
 		log.Print("Error opening database")
