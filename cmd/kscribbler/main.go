@@ -20,10 +20,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var db *sqlx.DB
 var currentBook Book
 var authToken string
-var kobodbPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 
 // Print info about the book and its bookmarks
 func (b Book) String() string {
@@ -57,32 +55,6 @@ func (b Book) String() string {
 	}
 
 	return result
-}
-
-// Modifies the database to ensure the KscribblerUploaded column exists in the Bookmark table.
-func ensureKscribblerUploadedColumn(db *sqlx.DB) error {
-	var count int
-	err := db.Get(&count, `
-		SELECT COUNT(*)
-		FROM pragma_table_info('Bookmark')
-		WHERE name = 'KscribblerUploaded';
-	`)
-	if err != nil {
-		return fmt.Errorf("error checking columns: %w", err)
-	}
-
-	if count == 0 {
-		// Column doesn't exist, create it
-		_, err := db.Exec(`ALTER TABLE Bookmark ADD COLUMN KscribblerUploaded INTEGER DEFAULT 0;`)
-		if err != nil {
-			return fmt.Errorf("error adding column: %w", err)
-		}
-		log.Println("Added missing column KscribblerUploaded to Bookmark table")
-	} else {
-		log.Println("KscribblerUploaded column already exists")
-	}
-
-	return nil
 }
 
 // Sets the ISBN field of the Book struct using the KoboISBN field.
@@ -212,8 +184,6 @@ func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 				}
 			}
 		}`, orBlock, orBlock)
-
-	// log.Println("Final Query:\n", query)
 
 	// Build JSON payload
 	requestBody := map[string]string{"query": query}
@@ -366,22 +336,18 @@ func init() {
 	}
 
 	if devDBPath := os.Getenv("KSCRIBBLER_DB_PATH"); devDBPath != "" {
-		kobodbPath = devDBPath
+		kobodbPath = devDBPath + "/KoboReader.sqlite"
+		kscribblerdbPath = devDBPath + "/kscribbler.sqlite"
 	}
 
 	var err error
 	db, err = sqlx.Open("sqlite", kobodbPath)
-
 	if err != nil {
-		log.Print("Error opening database")
+		err := fmt.Errorf("failed to open database at %s: %w", kobodbPath, err)
+		log.Print(err.Error())
 		log.Fatal(err)
 	}
-
-	err = ensureKscribblerUploadedColumn(db)
-	if err != nil {
-		log.Println("error creating KscribblerUploaded column")
-		log.Fatal(err)
-	}
+	defer db.Close()
 
 	cidquery := `
 		SELECT c.ContentID, c.ISBN, c.Title
@@ -446,10 +412,15 @@ func init() {
 
 	currentBook.Hardcover.PrivacyLevel = 1 // public by default
 	fmt.Println(currentBook)
+	err = createKscribblerDB()
+	if err != nil {
+		log.Fatalf("Failed to create kscribbler database: %v", err)
+	}
+	fmt.Println("Kscribbler init done")
+
 }
 
 func main() {
-	defer db.Close()
 	ctx := context.Background()
 
 	client, err := newHTTPClient()
@@ -459,18 +430,18 @@ func main() {
 
 	currentBook.koboToHardcover(client, ctx)
 
-	for _, bm := range currentBook.Bookmarks {
-		err := bm.postEntry(
-			client,
-			ctx,
-			currentBook.Hardcover.BookID,
-			false,
-			currentBook.Hardcover.PrivacyLevel,
-		)
-
-		if err != nil {
-			log.Printf("There was an error uploading quote to reading journal: %s\n", err)
-		}
-	}
-	log.Printf("Finished uploading bookmarks for %s to hardcover", currentBook.ContentID)
+	// for _, bm := range currentBook.Bookmarks {
+	// 	err := bm.postEntry(
+	// 		client,
+	// 		ctx,
+	// 		currentBook.Hardcover.BookID,
+	// 		false,
+	// 		currentBook.Hardcover.PrivacyLevel,
+	// 	)
+	//
+	// 	if err != nil {
+	// 		log.Printf("There was an error uploading quote to reading journal: %s\n", err)
+	// 	}
+	// }
+	// log.Printf("Finished uploading bookmarks for %s to hardcover", currentBook.ContentID)
 }
