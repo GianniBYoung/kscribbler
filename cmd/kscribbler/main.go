@@ -127,7 +127,7 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 
 		// Update the content table with the found ISBN as isbn-13
 		updateString := "UPDATE content SET ISBN = ? WHERE ContentID LIKE ?;"
-		_, err = db.Exec(updateString, isbn.ISBN13Number, "%"+b.ContentID+"%")
+		_, err = koboDB.Exec(updateString, isbn.ISBN13Number, "%"+b.ContentID+"%")
 		log.Println("Updating content table with ISBN ->", isbn.ISBN13Number)
 		log.Println("ContentID:", b.ContentID)
 		if err != nil {
@@ -212,7 +212,7 @@ func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 
 	if len(findBookResp.Data.Books) < 1 || len(findBookResp.Data.Books[0].Editions) < 1 {
 		log.Fatalf(
-			"Unable to ID Books from ISBN\n ISBN10: %s\nISBN13: %s",
+			"Unable to ID Books from ISBN\nISBN10: %s\nISBN13: %s",
 			book.ISBN.ISBN10Number,
 			book.ISBN.ISBN13Number,
 		)
@@ -238,7 +238,7 @@ func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) (bool, error) {
 }
 
 func (bm Bookmark) markAsUploaded() error {
-	_, err := db.Exec(`
+	_, err := koboDB.Exec(`
 		UPDATE Bookmark
 		SET KscribblerUploaded = 1
 		WHERE BookmarkID = ?
@@ -256,7 +256,7 @@ func (entry Bookmark) postEntry(
 	spoiler bool,
 	privacyLevel PrivacyLevel,
 ) error {
-	isUploaded, err := entry.hasBeenUploaded(db)
+	isUploaded, err := entry.hasBeenUploaded(koboDB)
 	if err != nil {
 		log.Printf("failed to check if entry has been uploaded: %v", err)
 		log.Printf(
@@ -336,82 +336,82 @@ func init() {
 	}
 
 	if devDBPath := os.Getenv("KSCRIBBLER_DB_PATH"); devDBPath != "" {
-		kobodbPath = devDBPath + "/KoboReader.sqlite"
-		kscribblerdbPath = devDBPath + "/kscribbler.sqlite"
+		koboDBPath = devDBPath + "/KoboReader.sqlite"
+		kscribblerDBPath = devDBPath + "/kscribbler.sqlite"
 	}
 
 	var err error
-	db, err = sqlx.Open("sqlite", kobodbPath)
+	koboDB, err = sqlx.Open("sqlite", koboDBPath)
 	if err != nil {
-		err := fmt.Errorf("failed to open database at %s: %w", kobodbPath, err)
+		err := fmt.Errorf("failed to open database at %s: %w", koboDBPath, err)
 		log.Print(err.Error())
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer koboDB.Close()
 
-	cidquery := `
-		SELECT c.ContentID, c.ISBN, c.Title
-		FROM content c
-		WHERE c.ContentType = 6
-			AND c.DateLastRead IS NOT NULL
-		ORDER BY c.DateLastRead DESC
-		LIMIT 1;
-	`
-	err = db.Get(&currentBook, cidquery)
-	if strings.HasPrefix(currentBook.ContentID, "file://") {
-		currentBook.ContentID = currentBook.ContentID[len("file://"):]
-		log.Println("Stripped file:// from ContentID")
-		log.Println("Current Book ContentID:", currentBook.ContentID)
-	}
-
-	if err != nil {
-		log.Fatal("Error getting last opened ContentID:", err)
-	}
-
-	err = db.Select(&currentBook.Bookmarks, `
-		SELECT
-			b.BookmarkID,
-			b.ContentID,
-			b.Text,
-			b.Annotation,
-			b.Type,
-			c.Title AS ChapterTitle
-		FROM
-			Bookmark b
-		LEFT JOIN
-			content c ON b.ContentID = c.ContentID
-		WHERE
-			b.ContentID LIKE ?
-			AND b.Type != 'dogear'
-			AND b.Text IS NOT NULL;
-	`, currentBook.ContentID+"%")
-
-	if err != nil {
-		log.Fatal("Error getting bookmarks:", err)
-	}
-	if len(currentBook.Bookmarks) == 0 {
-		log.Println("Exiting. No highlights found")
-		os.Exit(0)
-	}
-
-	if !currentBook.KoboISBN.Valid {
-		log.Println("Attempting to set isbn from highlights and notes")
-		err, isbnFound := currentBook.SetIsbnFromBook()
-		if err != nil || !isbnFound {
-			log.Println(err)
-			log.Fatal(
-				"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscrib:isbn-xxxxxx`",
-			)
-		}
-	} else {
-		err = currentBook.SetIsbn()
-		if err != nil {
-			fmt.Printf("Error setting ISBN: %v", err)
-		}
-	}
-
-	currentBook.Hardcover.PrivacyLevel = 1 // public by default
-	fmt.Println(currentBook)
+	// cidquery := `
+	// 	SELECT c.ContentID, c.ISBN, c.Title
+	// 	FROM content c
+	// 	WHERE c.ContentType = 6
+	// 		AND c.DateLastRead IS NOT NULL
+	// 	ORDER BY c.DateLastRead DESC
+	// 	LIMIT 1;
+	// `
+	// err = db.Get(&currentBook, cidquery)
+	// if strings.HasPrefix(currentBook.ContentID, "file://") {
+	// 	currentBook.ContentID = currentBook.ContentID[len("file://"):]
+	// 	log.Println("Stripped file:// from ContentID")
+	// 	log.Println("Current Book ContentID:", currentBook.ContentID)
+	// }
+	//
+	// if err != nil {
+	// 	log.Fatal("Error getting last opened ContentID:", err)
+	// }
+	//
+	// err = db.Select(&currentBook.Bookmarks, `
+	// 	SELECT
+	// 		b.BookmarkID,
+	// 		b.ContentID,
+	// 		b.Text,
+	// 		b.Annotation,
+	// 		b.Type,
+	// 		c.Title AS ChapterTitle
+	// 	FROM
+	// 		Bookmark b
+	// 	LEFT JOIN
+	// 		content c ON b.ContentID = c.ContentID
+	// 	WHERE
+	// 		b.ContentID LIKE ?
+	// 		AND b.Type != 'dogear'
+	// 		AND b.Text IS NOT NULL;
+	// `, currentBook.ContentID+"%")
+	//
+	// if err != nil {
+	// 	log.Fatal("Error getting bookmarks:", err)
+	// }
+	// if len(currentBook.Bookmarks) == 0 {
+	// 	log.Println("Exiting. No highlights found")
+	// 	os.Exit(0)
+	// }
+	//
+	// if !currentBook.KoboISBN.Valid {
+	// 	log.Println("Attempting to set isbn from highlights and notes")
+	// 	err, isbnFound := currentBook.SetIsbnFromBook()
+	// 	if err != nil || !isbnFound {
+	// 		log.Println(err)
+	// 		log.Fatal(
+	// 			"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscrib:isbn-xxxxxx`",
+	// 		)
+	// 	}
+	// } else {
+	// 	err = currentBook.SetIsbn()
+	// 	if err != nil {
+	// 		fmt.Printf("Error setting ISBN: %v", err)
+	// 	}
+	// }
+	//
+	// currentBook.Hardcover.PrivacyLevel = 1 // public by default
+	// fmt.Println(currentBook)
 	err = createKscribblerDB()
 	if err != nil {
 		log.Fatalf("Failed to create kscribbler database: %v", err)
