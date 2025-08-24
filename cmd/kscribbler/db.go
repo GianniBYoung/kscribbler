@@ -2,9 +2,9 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 
-	"database/sql"
 	"os"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -26,7 +26,7 @@ func createKscribblerDB() error {
 	}
 
 	// File does not exist, create the database
-	db, err := sql.Open("sqlite3", kscribblerDBPath)
+	db, err := sqlx.Open("sqlite3", kscribblerDBPath)
 	if err != nil {
 		return err
 	}
@@ -37,8 +37,7 @@ func createKscribblerDB() error {
         id TEXT PRIMARY KEY NOT NULL,
         book_title TEXT NOT NULL,
 		isbn TEXT,
-		hardcover_id TEXT, 
-		kscribbler_uploaded INTEGER DEFAULT 0
+		hardcover_id TEXT
     )
 `)
 	if err != nil {
@@ -52,6 +51,7 @@ func createKscribblerDB() error {
         quote TEXT NOT NULL,
         page INTEGER,
 		hardcover_id TEXT,
+		kscribbler_uploaded INTEGER DEFAULT 0,
         FOREIGN KEY(book_id) REFERENCES book(id),
         FOREIGN KEY(hardcover_id) REFERENCES book(hardcover_id)
     )
@@ -63,12 +63,41 @@ func createKscribblerDB() error {
 	return nil
 }
 
-func populateKscribblerDB() error {
-	ksdb, err := sql.Open("sqlite3", kscribblerDBPath)
+// Read kobosqlite and populate kscribbler sqlite with relevant data
+func connectDatabases() *sqlx.DB {
+	dbErrMsG := "failed to open database at %s: %w"
+
+	kscribblerDB, err := sqlx.Open("sqlite3", kscribblerDBPath)
 	if err != nil {
+		err := fmt.Errorf(dbErrMsG, kscribblerDBPath, err)
+		log.Fatal(err.Error())
+	}
+
+	// attach to kobo database also
+	_, err = kscribblerDB.Exec("ATTACH DATABASE ? AS koboDB", koboDBPath)
+	if err != nil {
+		err := fmt.Errorf("failed to attach Kobo database: %w", err)
+		log.Fatal(err.Error())
+	}
+	return kscribblerDB
+}
+
+func populateKscribblerDBBook() error {
+	kscribblerDB := connectDatabases()
+	defer kscribblerDB.Close()
+
+	bookQuery := `
+		INSERT OR IGNORE INTO book(isbn, book_title, id)
+	    SELECT DISTINCT c.ISBN, c.Title, b.VolumeID
+		FROM koboDB.content c
+		JOIN koboDB.Bookmark b
+		ON c.ContentID = b.VolumeID
+   `
+	log.Printf("Populating kscribbler database from Kobo database...")
+	_, err := kscribblerDB.Exec(bookQuery)
+	if err != nil {
+		err := fmt.Errorf("failed to populate kscribblerDB book Table : %w", err)
 		return err
 	}
-	defer ksdb.Close()
-
 	return nil
 }

@@ -341,33 +341,7 @@ func init() {
 	}
 
 	var err error
-	koboDB, err = sqlx.Open("sqlite", koboDBPath)
-	if err != nil {
-		err := fmt.Errorf("failed to open database at %s: %w", koboDBPath, err)
-		log.Print(err.Error())
-		log.Fatal(err)
-	}
-	defer koboDB.Close()
 
-	// cidquery := `
-	// 	SELECT c.ContentID, c.ISBN, c.Title
-	// 	FROM content c
-	// 	WHERE c.ContentType = 6
-	// 		AND c.DateLastRead IS NOT NULL
-	// 	ORDER BY c.DateLastRead DESC
-	// 	LIMIT 1;
-	// `
-	// err = db.Get(&currentBook, cidquery)
-	// if strings.HasPrefix(currentBook.ContentID, "file://") {
-	// 	currentBook.ContentID = currentBook.ContentID[len("file://"):]
-	// 	log.Println("Stripped file:// from ContentID")
-	// 	log.Println("Current Book ContentID:", currentBook.ContentID)
-	// }
-	//
-	// if err != nil {
-	// 	log.Fatal("Error getting last opened ContentID:", err)
-	// }
-	//
 	// err = db.Select(&currentBook.Bookmarks, `
 	// 	SELECT
 	// 		b.BookmarkID,
@@ -417,6 +391,12 @@ func init() {
 		log.Fatalf("Failed to create kscribbler database: %v", err)
 	}
 	fmt.Println("Kscribbler init done")
+
+	err = populateKscribblerDBBook()
+	if err != nil {
+		log.Fatalf("Failed to populate kscribbler database: %v", err)
+	}
+	fmt.Println("Kscribbler populate done")
 
 }
 
