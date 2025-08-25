@@ -6,7 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
-	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -16,22 +16,22 @@ var hardcoverCert []byte
 const apiURL = "https://api.hardcover.app/v1/graphql"
 
 // http client with embedded CA bundle for api.hardcover.app
-func newHTTPClient() (*http.Client, error) {
+func newHTTPClient() *http.Client {
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(hardcoverCert) {
-		return nil, fmt.Errorf("failed to parse embedded CA bundle")
+		log.Fatalf("failed to parse embedded CA bundle... exiting")
 	}
 	tlsConfig := &tls.Config{
 		RootCAs: pool,
 	}
 	transport := &http.Transport{TLSClientConfig: tlsConfig}
-	return &http.Client{Transport: transport}, nil
+	return &http.Client{Transport: transport}
 }
 
-func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error) {
+func newHardcoverRequest(ctx context.Context, body []byte) *http.Request {
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(body))
 	if err != nil {
-		return nil, err
+		log.Fatalf("Failed to create newHardcoverRequest: %v", err)
 	}
 
 	req.Header.Set("Authorization", authToken)
@@ -41,5 +41,5 @@ func newHardcoverRequest(ctx context.Context, body []byte) (*http.Request, error
 		"kscribbler - https://github.com/GianniBYoung/kscribbler",
 	)
 
-	return req, nil
+	return req
 }

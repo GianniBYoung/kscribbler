@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -17,12 +18,13 @@ import (
 )
 
 var authToken string
+var stopAfterInit bool
 
-// fleshes out struct and assocites book to hardcover
 // TODO: Think about a more efficient query so i don't hammer the api
-// TODO: this also assumes a valid isbn already
+// fleshes out struct and assocites book to hardcover
 func (book *Book) koboToHardcover() {
 
+	// this also assumes a valid isbn already
 	if book.SimpleISBN.ISBN10Number == "" && book.SimpleISBN.ISBN13Number == "" {
 		log.Printf("Book %s has no valid ISBN to query Hardcover", book.BookID)
 		return
@@ -30,10 +32,7 @@ func (book *Book) koboToHardcover() {
 
 	ctx := context.Background()
 
-	client, err := newHTTPClient()
-	if err != nil {
-		log.Fatalf("Failed to create HTTP client: %v", err)
-	}
+	client := newHTTPClient()
 
 	var filters []string
 	if book.SimpleISBN.ISBN13Number != "" {
@@ -79,10 +78,7 @@ func (book *Book) koboToHardcover() {
 		log.Fatalf("Failed to encode GraphQL request: %v", err)
 	}
 
-	req, err := newHardcoverRequest(ctx, bodyBytes)
-	if err != nil {
-		log.Fatalf("Failed to create request: %v", err)
-	}
+	req := newHardcoverRequest(ctx, bodyBytes)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -97,7 +93,6 @@ func (book *Book) koboToHardcover() {
 		log.Fatalf("Failed to unmarshal response: %v", err)
 	}
 
-	// TODO: If i am populating the db first and then uploading quotes later, i don't need to persist this to structs???
 	if len(findBookResp.Data.Books) < 1 || len(findBookResp.Data.Books[0].Editions) < 1 {
 		log.Printf(
 			"Unable to ID Books from ISBN\nISBN10: %s\nISBN13: %s",
@@ -185,10 +180,7 @@ func (entry Bookmark) postEntry(
 
 	reqBody := map[string]string{"query": mutation}
 	bodyBytes, _ := json.Marshal(reqBody)
-	req, err := newHardcoverRequest(ctx, bodyBytes)
-	if err != nil {
-		log.Printf("Error with request creation %v", err)
-	}
+	req := newHardcoverRequest(ctx, bodyBytes)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -200,14 +192,13 @@ func (entry Bookmark) postEntry(
 	fmt.Println("Hardcover response:", string(rawResp))
 	err = entry.markAsUploaded()
 	if err != nil {
-		log.Printf("Failed to mark entry as uploaded: %v", err)
+		log.Printf("Failed to mark entry as uploaded in kscribblerDB: %v", err)
 	}
 
 	return nil
 }
 
 // Initializes the environment, database, and retrieves the last opened book and its bookmarks.
-// This should now prepare the database and the main function will re-open the db connection and upload quotes.
 func init() {
 	log.Printf("Starting Kscribbler v%s\n", version.Version)
 
@@ -224,44 +215,36 @@ func init() {
 		kscribblerDBPath = devDBPath + "/kscribbler.sqlite"
 	}
 
-	if err := createKscribblerTables(); err != nil {
-		log.Fatalf("Failed to create kscribbler database: %v", err)
-	}
+	// create kscribblerDB and populate it with relevant data from KoboReader.sqlite
+	createKscribblerTables()
+	populateBookTable()
+	populateQuoteTable()
 
-	if err := populateBookTable(); err != nil {
-		log.Fatalf("Failed to populate kscribbler book table: %v", err)
-	}
-
-	if err := populateQuoteTable(); err != nil {
-		log.Fatalf("Failed to populate kscribbler quote table: %v", err)
-	}
-
+	// Supplement book entries with ISBNs and Hardcover info
 	kscribblerDB = connectKscribblerDB()
 	updateDBWithISBNs()
-	log.Println("Updated missing ISBNs in book table")
-
 	updateDBWithHardcoverInfo()
-	log.Println("Updated missing Hardcover info in book table")
-
 	kscribblerDB.Close()
+
 	log.Println("kscribblerDB initialized. Ready to upload quotes")
 }
 
 func main() {
-	ctx := context.Background()
-
-	client, err := newHTTPClient()
-	if err != nil {
-		log.Fatalf("Failed to create HTTP client: %v", err)
+	flag.BoolVar(&stopAfterInit, "init", false, "Stop execution after init() runs")
+	flag.Parse()
+	if stopAfterInit {
+		log.Println(
+			"The init flag was set; stopping execution after database initialization. Quotes will not be uploaded.",
+		)
+		os.Exit(0)
 	}
+
+	ctx := context.Background()
+	client := newHTTPClient()
 
 	kscribblerDB = connectKscribblerDB()
-
-	books, err := loadBooksFromDB()
-
-	if err != nil {
-		log.Fatalf("Failed to load books from database: %v", err)
-	}
+	defer kscribblerDB.Close()
+	books := loadBooksFromDB()
 
 	for _, currentBook := range books {
 		log.Printf("Processing book: %s\n", currentBook)
@@ -273,10 +256,11 @@ func main() {
 				currentBook.HardcoverEdition,
 				false,
 			)
-			log.Printf("Uploaded bookmark: %s\n", bm.BookmarkID)
 
 			if err != nil {
 				log.Printf("There was an error uploading quote to reading journal: %s\n", err)
+			} else {
+				log.Printf("Uploaded bookmark: %s\n", bm.BookmarkID)
 			}
 		}
 		log.Printf("Finished uploading bookmarks for book: %s\n", currentBook.Title.String)

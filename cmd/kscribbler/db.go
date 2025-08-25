@@ -43,12 +43,11 @@ func connectDatabases() *sqlx.DB {
 }
 
 // createKscribblerTables creates the SQLite database file if it doesn't exist
-func createKscribblerTables() error {
+func createKscribblerTables() {
 	if _, err := os.Stat(kscribblerDBPath); err == nil {
-		return nil
+		return
 	} else if !errors.Is(err, os.ErrNotExist) {
-		log.Fatal(err)
-		return err
+		log.Fatalf("Error while trying to create/open kscribblerDB: %v", err)
 	}
 
 	kscribblerDB := connectKscribblerDB()
@@ -64,7 +63,7 @@ func createKscribblerTables() error {
     )
 `)
 	if err != nil {
-		log.Fatalf("failed to create book table: %v", err)
+		log.Fatalf("failed to create book table in kscribblerDB: %v", err)
 	}
 
 	// Quotes table
@@ -82,13 +81,12 @@ func createKscribblerTables() error {
     )
 `)
 	if err != nil {
-		log.Fatalf("failed to create quotes table: %v", err)
+		log.Fatalf("failed to create quotes table in kscribblerDB: %v", err)
 	}
 
-	return nil
 }
 
-func populateQuoteTable() error {
+func populateQuoteTable() {
 	kscribblerDB := connectDatabases()
 	defer kscribblerDB.Close()
 
@@ -105,13 +103,11 @@ func populateQuoteTable() error {
 	log.Printf("Populating quote table...")
 	_, err := kscribblerDB.Exec(quoteQuery)
 	if err != nil {
-		err := fmt.Errorf("failed to populate kscribblerDB book Table : %w", err)
-		return err
+		log.Fatalf("failed to populate kscribblerDB book Table: %v", err)
 	}
-	return nil
 }
 
-func populateBookTable() error {
+func populateBookTable() {
 	kscribblerDB := connectDatabases()
 	defer kscribblerDB.Close()
 
@@ -125,10 +121,8 @@ func populateBookTable() error {
 	log.Printf("Populating book table...")
 	_, err := kscribblerDB.Exec(bookQuery)
 	if err != nil {
-		err := fmt.Errorf("failed to populate kscribblerDB book Table : %w", err)
-		return err
+		log.Fatalf("failed to populate kscribblerDB book Table : %v", err)
 	}
-	return nil
 }
 
 func loadQuotesFromDB() ([]Bookmark, error) {
@@ -161,11 +155,12 @@ func updateDBWithHardcoverInfo() {
 
 	if err != nil {
 		log.Printf("failed to load books with missing hardcover info: %w", err)
+		return
 	}
 
 	log.Printf("Found %d books with missing hardcover info", len(books))
 	for _, book := range books {
-		//isbn 13 is breaking with 1230004555278
+		//isbn 13 is breaking with 1230004555278 (silent spring)
 		// 1230004555278 is not valid
 		isbn, err := simpleISBN.NewISBN(book.FoundISBN.String)
 		book.SimpleISBN = *isbn
@@ -200,6 +195,7 @@ func updateDBWithHardcoverInfo() {
 		}
 	}
 
+	log.Println("Updated missing Hardcover info in book table")
 }
 
 // loop through all books with missing isbns and try to populate them from their quotes
@@ -210,6 +206,7 @@ func updateDBWithISBNs() {
 
 	if err != nil {
 		log.Printf("failed to load books with missing isbns: %v", err)
+		return
 	}
 
 	for _, book := range books {
@@ -222,13 +219,14 @@ func updateDBWithISBNs() {
 		book.SetIsbnFromBook()
 	}
 
+	log.Println("Updated missing ISBNs in book table")
 	// TODO: figure out overriding precedence - 1. annotation, 2. highlights 3. isbn from KoboDB
 	// current approach is only a passthrough of things missing isbn
 	// also want to make sure isbn 13 is stored
 }
 
 // loadBooksFromDB loads books with pending quotes from the kscribbler database
-func loadBooksFromDB() ([]Book, error) {
+func loadBooksFromDB() []Book {
 	var books []Book
 
 	err := kscribblerDB.Select(&books, `
@@ -246,7 +244,7 @@ func loadBooksFromDB() ([]Book, error) {
 		ORDER BY b.book_id;
 		`)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load books: %w", err)
+		log.Fatalf("failed to load books: %v", err)
 	}
 
 	for i := range books {
@@ -262,9 +260,9 @@ func loadBooksFromDB() ([]Book, error) {
 			WHERE book_id = ? AND kscribbler_uploaded = 0;
 		`, books[i].BookID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load bookmarks for book %s: %w", books[i].BookID, err)
+			log.Fatalf("failed to load bookmarks for book %s: %v", books[i].BookID, err)
 		}
 	}
 
-	return books, nil
+	return books
 }
