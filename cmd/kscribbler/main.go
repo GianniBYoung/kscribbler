@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/GianniBYoung/kscribbler/version"
@@ -22,25 +21,25 @@ import (
 
 var currentBook Book
 var authToken string
+var kscribblerDB *sqlx.DB
 
 // Print info about the book and its bookmarks
-func (b Book) String() string {
+func (book Book) String() string {
 	var result string
 
 	result += "\n========== Book ==========\n"
-	result += fmt.Sprintf("Title: %s\n", b.Title.String)
-	result += fmt.Sprintf("ContentID: %s\n", b.ContentID)
-	result += fmt.Sprintf("ISBN: %s", b.ISBN)
+	result += fmt.Sprintf("Title: %s\n", book.Title.String)
+	result += fmt.Sprintf("ContentID: %s\n", book.BookID)
+	result += fmt.Sprintf("ISBN: %s", book.ISBN)
 
 	result += "\n===== Hardcover Info =====\n"
-	result += fmt.Sprintf("BookID: %d\n", b.Hardcover.BookID)
-	result += fmt.Sprintf("EditionID: %d\n", b.Hardcover.EditionID)
-	result += fmt.Sprintf("PrivacyLevel: %d\n", b.Hardcover.PrivacyLevel)
+	result += fmt.Sprintf("BookID: %d\n", book.Hardcover.BookID)
+	result += fmt.Sprintf("EditionID: %d\n", book.Hardcover.EditionID)
+	result += fmt.Sprintf("PrivacyLevel: %d\n", book.Hardcover.PrivacyLevel)
 
 	result += "\n======== Bookmarks ========\n"
-	for i, bm := range b.Bookmarks {
+	for i, bm := range book.Bookmarks {
 		result += fmt.Sprintf("[%d]\n", i+1)
-		result += fmt.Sprintf("Chapter Title: %s\n", bm.ChapterTitle.String)
 		result += fmt.Sprintf("BookmarkID: %s\n", bm.BookmarkID)
 		result += fmt.Sprintf("Type: %s\n", bm.Type)
 
@@ -57,17 +56,18 @@ func (b Book) String() string {
 	return result
 }
 
-// Sets the ISBN field of the Book struct using the KoboISBN field.
-func (b *Book) SetIsbn() error {
-	isbn, err := simpleISBN.NewISBN(b.KoboISBN.String)
-	if err != nil {
-		return err
-	}
-	b.ISBN = *isbn
-	return nil
-}
+// // Sets the ISBN field of the Book struct using the KoboISBN field.
+// // TODO: can i unmarshal directly to simpleISBN.ISBN?
+// func (b *Book) SetIsbn() error {
+// 	isbn, err := simpleISBN.NewISBN(b.ISBN)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	b.ISBN = *isbn
+// 	return nil
+// }
 
-// Attempts to extract an ISBN from the book's highlights or notes beginning with `kscrib:`.
+// Attempts to extract an ISBN from the book's highlights (if it is a highlighted ISBN) or notes beginning with `kscrib:`.
 func (b *Book) SetIsbnFromBook() (error, bool) {
 	isbn10Regex := regexp.MustCompile(`[0-9][-0-9]{8,12}[0-9Xx]`)
 	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
@@ -95,6 +95,8 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 			"e-book", "",
 			"ebook", "",
 			"kscrib:", "",
+			"electronic", "",
+			"book", "",
 		)
 		isbnCanidate = isbnCleaner.Replace(isbnCanidate)
 
@@ -118,40 +120,27 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 		}
 		log.Println(match)
 
-		//potentially handle the fatal by removing problem quote?
 		isbn, err = simpleISBN.NewISBN(match)
 		if err != nil {
 			log.Fatalf("ISBN matched from highlight/note but failed to parse:\n%s\n%s", match, err)
 		}
 		b.ISBN = *isbn
 
-		// Update the content table with the found ISBN as isbn-13
-		updateString := "UPDATE content SET ISBN = ? WHERE ContentID LIKE ?;"
-		_, err = koboDB.Exec(updateString, isbn.ISBN13Number, "%"+b.ContentID+"%")
+		// update the book table with the new isbn
+		updateString := "UPDATE book SET isbn = ? WHERE id LIKE ?;"
+		_, err = koboDB.Exec(updateString, isbn.ISBN13Number, "%"+b.BookID+"%")
 		log.Println("Updating content table with ISBN ->", isbn.ISBN13Number)
-		log.Println("ContentID:", b.ContentID)
+
 		if err != nil {
 			log.Printf("Failed to update ISBN for book: %v", err)
-			continue
+			return err, true
 		}
-
-		markAsUploadedErr := b.Bookmarks[i].markAsUploaded()
-		if markAsUploadedErr != nil {
-			log.Printf(
-				"Failed to mark isbn highlight as uploaded: %v\ncontinuing...",
-				markAsUploadedErr,
-			)
-		}
-		// delete the bookmark from the list so we don't upload it
-		b.Bookmarks = slices.Delete(b.Bookmarks, i, i+1)
-
-		return err, true
 
 	}
 	return nil, false
 }
 
-// flesh out struct and associte book to hardcover
+// fleshes out struct and associte book to hardcover
 func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 
 	var filters []string
@@ -220,15 +209,39 @@ func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 
 	book.Hardcover.BookID = findBookResp.Data.Books[0].ID
 	book.Hardcover.EditionID = findBookResp.Data.Books[0].Editions[0].ID
+	if book.updateHardcoverInfo() != nil {
+		log.Fatalf("Failed to update hardcover info in book table %v", err)
+	}
+
+}
+
+func (book Book) updateHardcoverInfo() error {
+	if book.Hardcover.BookID != -1 || book.Hardcover.EditionID != -1 {
+		updateString := "UPDATE book SET hardcover_id = ?, hardcover_edition = ? WHERE id LIKE ?;"
+		_, err := koboDB.Exec(
+			updateString,
+			book.Hardcover.BookID,
+			book.Hardcover.EditionID,
+			"%"+book.BookID+"%",
+		)
+		if err != nil {
+			log.Printf(
+				"Failed to update hardcover_id and hardcover_edition for %s: %v",
+				book.Title.String,
+				err,
+			)
+		}
+	}
+	return nil
 }
 
 func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) (bool, error) {
 	var isUploaded int
 
-	err := db.Get(&isUploaded, `
-		SELECT KscribblerUploaded
-		FROM Bookmark
-		WHERE BookmarkID = ?
+	err := kscribblerDB.Get(&isUploaded, `
+		SELECT kscribbler_uploaded
+		FROM quote
+		WHERE bookmark_id = ?
 	`, bm.BookmarkID)
 	if err != nil {
 		return false, err
@@ -239,9 +252,9 @@ func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) (bool, error) {
 
 func (bm Bookmark) markAsUploaded() error {
 	_, err := koboDB.Exec(`
-		UPDATE Bookmark
-		SET KscribblerUploaded = 1
-		WHERE BookmarkID = ?
+		UPDATE quote
+		SET kscribbler_uploaded = 1
+		WHERE bookmark_id = ?
 	`, bm.BookmarkID)
 	if err != nil {
 		return fmt.Errorf("failed to mark bookmark as uploaded: %w", err)
@@ -340,64 +353,20 @@ func init() {
 		kscribblerDBPath = devDBPath + "/kscribbler.sqlite"
 	}
 
-	var err error
-
-	// err = db.Select(&currentBook.Bookmarks, `
-	// 	SELECT
-	// 		b.BookmarkID,
-	// 		b.ContentID,
-	// 		b.Text,
-	// 		b.Annotation,
-	// 		b.Type,
-	// 		c.Title AS ChapterTitle
-	// 	FROM
-	// 		Bookmark b
-	// 	LEFT JOIN
-	// 		content c ON b.ContentID = c.ContentID
-	// 	WHERE
-	// 		b.ContentID LIKE ?
-	// 		AND b.Type != 'dogear'
-	// 		AND b.Text IS NOT NULL;
-	// `, currentBook.ContentID+"%")
-	//
-	// if err != nil {
-	// 	log.Fatal("Error getting bookmarks:", err)
-	// }
-	// if len(currentBook.Bookmarks) == 0 {
-	// 	log.Println("Exiting. No highlights found")
-	// 	os.Exit(0)
-	// }
-	//
-	// if !currentBook.KoboISBN.Valid {
-	// 	log.Println("Attempting to set isbn from highlights and notes")
-	// 	err, isbnFound := currentBook.SetIsbnFromBook()
-	// 	if err != nil || !isbnFound {
-	// 		log.Println(err)
-	// 		log.Fatal(
-	// 			"ISBN is missing. Please highlight a valid isbn within the book or create a new annotation containing `kscrib:isbn-xxxxxx`",
-	// 		)
-	// 	}
-	// } else {
-	// 	err = currentBook.SetIsbn()
-	// 	if err != nil {
-	// 		fmt.Printf("Error setting ISBN: %v", err)
-	// 	}
-	// }
-	//
-	// currentBook.Hardcover.PrivacyLevel = 1 // public by default
-	// fmt.Println(currentBook)
-	err = createKscribblerDB()
-	if err != nil {
+	if err := createKscribblerTables(); err != nil {
 		log.Fatalf("Failed to create kscribbler database: %v", err)
 	}
-	fmt.Println("Kscribbler init done")
 
-	err = populateKscribblerDBBook()
-	if err != nil {
-		log.Fatalf("Failed to populate kscribbler database: %v", err)
+	if err := populateBookTable(); err != nil {
+		log.Fatalf("Failed to populate kscribbler book table: %v", err)
 	}
-	fmt.Println("Kscribbler populate done")
+	log.Println("Book population done")
 
+	if err := populateQuoteTable(); err != nil {
+		log.Fatalf("Failed to populate kscribbler quote table: %v", err)
+	}
+	log.Println("Quote population done")
+	log.Println("Kscribbler init done")
 }
 
 func main() {
@@ -407,6 +376,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create HTTP client: %v", err)
 	}
+
+	kscribblerDB = connectKscribblerDB()
 
 	currentBook.koboToHardcover(client, ctx)
 

@@ -22,23 +22,22 @@ type Hardcover struct {
 
 // Represents a book entry from KoboReader.sqlite
 type Book struct {
-	ContentID string         `db:"ContentID"`
-	Title     sql.NullString `db:"Title"`
-	KoboISBN  sql.NullString `db:"ISBN"`
-	ISBN      simpleISBN.ISBN
+	BookID string         `db:"book_id"`
+	Title  sql.NullString `db:"title"`
+	//TODO: check this
+	ISBN      simpleISBN.ISBN `db:"isbn"`
 	Bookmarks []Bookmark
 	Hardcover Hardcover
 }
 
 // Represents the KoboReader.sqlite for a quote or annotation.
 type Bookmark struct {
-	BookmarkID         string         `db:"BookmarkID"`
-	ContentID          string         `db:"ContentID"`
-	Quote              sql.NullString `db:"Text"`
-	Annotation         sql.NullString `db:"Annotation"`
-	Type               string         `db:"Type"`
-	ChapterTitle       sql.NullString `db:"ChapterTitle"`
-	KscribblerUploaded bool           `db:"KscribblerUploaded"`
+	BookmarkID         string         `db:"bookmark_id"`
+	BookID             string         `db:"book_id"`
+	Quote              sql.NullString `db:"quote"`
+	Annotation         sql.NullString `db:"annotation"`
+	Type               string         `db:"type"`
+	KscribblerUploaded bool           `db:"kscribbler_uploaded"`
 }
 
 // http response structure supporting books and reading journal insertions for hardcover.app

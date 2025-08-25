@@ -16,8 +16,32 @@ var koboDB *sqlx.DB
 var koboDBPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 var kscribblerDBPath = "/mnt/onboard/.adds/kscribbler.sqlite"
 
-// createKscribblerDB creates the SQLite database file if it doesn't exist
-func createKscribblerDB() error {
+// connectKscribblerDB connects to the kscribbler SQLite database and creates it if it doesn't exist.
+func connectKscribblerDB() *sqlx.DB {
+	dbErrMsG := "failed to open database at %s: %w"
+
+	kscribblerDB, err := sqlx.Open("sqlite3", kscribblerDBPath)
+	if err != nil {
+		err := fmt.Errorf(dbErrMsG, kscribblerDBPath, err)
+		log.Fatal(err.Error())
+	}
+	return kscribblerDB
+}
+
+// Read kobosqlite and populate kscribbler sqlite with relevant data
+func connectDatabases() *sqlx.DB {
+	kscribblerDB := connectKscribblerDB()
+	// attach to kobo database also
+	_, err := kscribblerDB.Exec("ATTACH DATABASE ? AS koboDB", koboDBPath)
+	if err != nil {
+		err := fmt.Errorf("failed to attach Kobo database: %w", err)
+		log.Fatal(err.Error())
+	}
+	return kscribblerDB
+}
+
+// createKscribblerTables creates the SQLite database file if it doesn't exist
+func createKscribblerTables() error {
 	if _, err := os.Stat(kscribblerDBPath); err == nil {
 		return nil
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -25,16 +49,12 @@ func createKscribblerDB() error {
 		return err
 	}
 
-	// File does not exist, create the database
-	db, err := sqlx.Open("sqlite3", kscribblerDBPath)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
+	kscribblerDB := connectKscribblerDB()
+	defer kscribblerDB.Close()
 
-	_, err = db.Exec(`
+	_, err := kscribblerDB.Exec(`
     CREATE TABLE IF NOT EXISTS book (
-        id TEXT PRIMARY KEY NOT NULL,
+        book_id TEXT PRIMARY KEY NOT NULL,
         book_title TEXT NOT NULL,
 		isbn TEXT,
 		hardcover_id TEXT
@@ -45,15 +65,20 @@ func createKscribblerDB() error {
 	}
 
 	// Quotes table
-	_, err = db.Exec(`
+	_, err = kscribblerDB.Exec(`
     CREATE TABLE IF NOT EXISTS quote (
         book_id INTEGER NOT NULL,
+		bookmark_id TEXT PRIMARY KEY NOT NULL,
         quote TEXT NOT NULL,
+        annotation TEXT,
         page INTEGER,
-		hardcover_id TEXT,
+		hardcover_id INTEGER Default -1,
+		hardcover_edition INTEGER Default -1,
+		type TEXT,
 		kscribbler_uploaded INTEGER DEFAULT 0,
-        FOREIGN KEY(book_id) REFERENCES book(id),
+        FOREIGN KEY(book_id) REFERENCES book(book_id),
         FOREIGN KEY(hardcover_id) REFERENCES book(hardcover_id)
+		CONSTRAINT unique_trimmed_quote UNIQUE (quote)
     )
 `)
 	if err != nil {
@@ -63,37 +88,41 @@ func createKscribblerDB() error {
 	return nil
 }
 
-// Read kobosqlite and populate kscribbler sqlite with relevant data
-func connectDatabases() *sqlx.DB {
-	dbErrMsG := "failed to open database at %s: %w"
+func populateQuoteTable() error {
+	kscribblerDB := connectDatabases()
+	defer kscribblerDB.Close()
 
-	kscribblerDB, err := sqlx.Open("sqlite3", kscribblerDBPath)
+	quoteQuery := `
+		INSERT OR IGNORE INTO quote(book_id,bookmark_id, type, quote, annotation, kscribbler_uploaded)
+	    SELECT b.VolumeID, b.BookmarkID, b.Type, TRIM(b.Text), b.Annotation, 
+	    CASE
+	        WHEN instr(lower(b.Annotation), 'kscrib') > 0 THEN 1
+	        ELSE 0
+	    END
+	 	FROM koboDB.Bookmark b
+	    WHERE b.Text IS NOT NULL AND TRIM(b.Text) != ''
+   `
+	log.Printf("Populating quote table...")
+	_, err := kscribblerDB.Exec(quoteQuery)
 	if err != nil {
-		err := fmt.Errorf(dbErrMsG, kscribblerDBPath, err)
-		log.Fatal(err.Error())
+		err := fmt.Errorf("failed to populate kscribblerDB book Table : %w", err)
+		return err
 	}
-
-	// attach to kobo database also
-	_, err = kscribblerDB.Exec("ATTACH DATABASE ? AS koboDB", koboDBPath)
-	if err != nil {
-		err := fmt.Errorf("failed to attach Kobo database: %w", err)
-		log.Fatal(err.Error())
-	}
-	return kscribblerDB
+	return nil
 }
 
-func populateKscribblerDBBook() error {
+func populateBookTable() error {
 	kscribblerDB := connectDatabases()
 	defer kscribblerDB.Close()
 
 	bookQuery := `
-		INSERT OR IGNORE INTO book(isbn, book_title, id)
+		INSERT OR IGNORE INTO book(isbn, book_title, book_id)
 	    SELECT DISTINCT c.ISBN, c.Title, b.VolumeID
 		FROM koboDB.content c
 		JOIN koboDB.Bookmark b
 		ON c.ContentID = b.VolumeID
    `
-	log.Printf("Populating kscribbler database from Kobo database...")
+	log.Printf("Populating book table...")
 	_, err := kscribblerDB.Exec(bookQuery)
 	if err != nil {
 		err := fmt.Errorf("failed to populate kscribblerDB book Table : %w", err)
