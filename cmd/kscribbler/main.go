@@ -51,8 +51,17 @@ func (book Book) String() string {
 	return result
 }
 
-// fleshes out struct and associte book to hardcover
-func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
+// fleshes out struct and assocites book to hardcover
+// TODO: Think about a more efficient query so i don't hammer the api
+// TODO: this also assumes a valid isbn already
+func (book *Book) koboToHardcover() {
+
+	ctx := context.Background()
+
+	client, err := newHTTPClient()
+	if err != nil {
+		log.Fatalf("Failed to create HTTP client: %v", err)
+	}
 
 	var filters []string
 	if book.SimpleISBN.ISBN13Number != "" {
@@ -244,7 +253,7 @@ func (entry Bookmark) postEntry(
 }
 
 // Initializes the environment, database, and retrieves the last opened book and its bookmarks.
-// This has a timing issue since the last opened book depends on when the KoboReader.sqlite database was last updated which may not be immediate after a book is opened.
+// This should now prepare the database and the main function will re-open the db connection and upload quotes.
 func init() {
 	log.Printf("Starting Kscribbler v%s\n", version.Version)
 
@@ -275,6 +284,14 @@ func init() {
 	}
 	log.Println("Quote population done")
 	log.Println("Kscribbler init done")
+
+	kscribblerDB = connectKscribblerDB()
+	updateDBWithISBNs()
+
+	updateDBWithHardcoverInfo()
+
+	kscribblerDB.Close()
+	log.Println("kscribblerDB initialized. Ready to upload quotes")
 }
 
 func main() {

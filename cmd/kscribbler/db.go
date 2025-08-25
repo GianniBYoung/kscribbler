@@ -151,7 +151,25 @@ func loadQuotesFromDB() ([]Bookmark, error) {
 	return quotes, nil
 }
 
-// also do this with hardover ids
+func updateDBWithHardcoverInfo() {
+
+	var books []Book
+	//TODO: check this
+	err := kscribblerDB.Select(
+		&books,
+		`SELECT isbn FROM book WHERE hardcover_id OR hardcover_edition IS NULL;`,
+	)
+
+	if err != nil {
+		log.Printf("failed to load books with missing hardcover info: %w", err)
+	}
+
+	for _, book := range books {
+		book.koboToHardcover()
+	}
+
+}
+
 // loop through all books with missing isbns and try to populate them from their quotes
 func updateDBWithISBNs() {
 
