@@ -234,7 +234,7 @@ func (book Book) updateHardcoverInfo() error {
 	return nil
 }
 
-func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) (bool, error) {
+func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) bool {
 	var isUploaded int
 
 	err := kscribblerDB.Get(&isUploaded, `
@@ -243,10 +243,11 @@ func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) (bool, error) {
 		WHERE bookmark_id = ?
 	`, bm.BookmarkID)
 	if err != nil {
-		return false, err
+		log.Printf("failed to check if bookmark has been uploaded: %v", err)
+		return true
 	}
 
-	return isUploaded != 0, nil
+	return isUploaded != 0
 }
 
 func (bm Bookmark) markAsUploaded() error {
@@ -267,18 +268,8 @@ func (entry Bookmark) postEntry(
 	hardcoverID int,
 	spoiler bool,
 ) error {
-	isUploaded, err := entry.hasBeenUploaded(koboDB)
-	if err != nil {
-		log.Printf("failed to check if entry has been uploaded: %v", err)
-		log.Printf(
-			"------\nBookMarkID: %s\nBookmarkType %s\n------\n",
-			entry.BookmarkID,
-			entry.Type,
-		)
-		return err
-	}
-	if isUploaded {
-		log.Printf("Entry has already been uploaded, skipping: %s", entry.BookmarkID)
+
+	if entry.hasBeenUploaded(kscribblerDB) {
 		return nil
 	}
 
@@ -379,17 +370,18 @@ func main() {
 
 	currentBook.koboToHardcover(client, ctx)
 
-	// for _, bm := range currentBook.Bookmarks {
-	// 	err := bm.postEntry(
-	// 		client,
-	// 		ctx,
-	// 		currentBook.Hardcover.BookID,
-	// 		false,
-	// 	)
-	//
-	// 	if err != nil {
-	// 		log.Printf("There was an error uploading quote to reading journal: %s\n", err)
-	// 	}
-	// }
-	// log.Printf("Finished uploading bookmarks for %s to hardcover", currentBook.ContentID)
+	//TODO: update this to handdle full library
+	for _, bm := range currentBook.Bookmarks {
+		err := bm.postEntry(
+			client,
+			ctx,
+			currentBook.Hardcover.BookID,
+			false,
+		)
+
+		if err != nil {
+			log.Printf("There was an error uploading quote to reading journal: %s\n", err)
+		}
+	}
+	log.Printf("Finished uploading bookmarks")
 }
