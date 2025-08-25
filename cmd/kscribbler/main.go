@@ -9,19 +9,15 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/GianniBYoung/kscribbler/version"
-	"github.com/GianniBYoung/simpleISBN"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	_ "modernc.org/sqlite"
 )
 
-var currentBook Book
 var authToken string
-var kscribblerDB *sqlx.DB
 
 // Print info about the book and its bookmarks
 func (book Book) String() string {
@@ -30,7 +26,7 @@ func (book Book) String() string {
 	result += "\n========== Book ==========\n"
 	result += fmt.Sprintf("Title: %s\n", book.Title.String)
 	result += fmt.Sprintf("BookID: %s\n", book.BookID)
-	result += fmt.Sprintf("ISBN: %s", book.ISBN)
+	result += fmt.Sprintf("ISBN: %s", book.SimpleISBN.String())
 
 	result += "\n===== Hardcover Info =====\n"
 	result += fmt.Sprintf("HardcoverID: %d\n", book.Hardcover.BookID)
@@ -55,99 +51,21 @@ func (book Book) String() string {
 	return result
 }
 
-// // Sets the ISBN field of the Book struct using the KoboISBN field.
-// // TODO: can i unmarshal directly to simpleISBN.ISBN?
-// func (b *Book) SetIsbn() error {
-// 	isbn, err := simpleISBN.NewISBN(b.ISBN)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	b.ISBN = *isbn
-// 	return nil
-// }
-
-// Attempts to extract an ISBN from the book's highlights (if it is a highlighted ISBN) or notes beginning with `kscrib:`.
-func (b *Book) SetIsbnFromBook() (error, bool) {
-	isbn10Regex := regexp.MustCompile(`[0-9][-0-9]{8,12}[0-9Xx]`)
-	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
-
-	for _, bm := range b.Bookmarks {
-		if !bm.Annotation.Valid ||
-			!strings.Contains(bm.Annotation.String, strings.ToLower("kscrib:")) {
-			continue
-		}
-
-		var isbnCanidate string
-		if bm.Type == "note" {
-			isbnCanidate = strings.TrimSpace(bm.Annotation.String)
-		} else {
-			isbnCanidate = strings.TrimSpace(bm.Quote.String)
-		}
-		isbnCanidate = strings.ToLower(isbnCanidate)
-
-		var isbnCleaner = strings.NewReplacer(
-			" ", "",
-			"-", "",
-			"isbn", "",
-			"(", "",
-			")", "",
-			"e-book", "",
-			"ebook", "",
-			"kscrib:", "",
-			"electronic", "",
-			"book", "",
-		)
-		isbnCanidate = isbnCleaner.Replace(isbnCanidate)
-
-		// Ignore if the highlight is very long (user probably highlighted a sentence)
-		if len(isbnCanidate) > 55 {
-			continue
-		}
-
-		var isbn *simpleISBN.ISBN
-		var err error
-		var match string
-		log.Println("Checking for ISBN in: ", isbnCanidate)
-		if isbn13Regex.MatchString(isbnCanidate) {
-			log.Println("Found ISBN-13")
-			match = isbn13Regex.FindString(isbnCanidate)
-		} else if isbn10Regex.MatchString(isbnCanidate) {
-			log.Println("Found ISBN-10")
-			match = isbn10Regex.FindString(isbnCanidate)
-		} else {
-			continue
-		}
-		log.Println(match)
-
-		isbn, err = simpleISBN.NewISBN(match)
-		if err != nil {
-			log.Fatalf("ISBN matched from highlight/note but failed to parse:\n%s\n%s", match, err)
-		}
-		b.ISBN = *isbn
-
-		// update the book table with the new isbn
-		updateString := "UPDATE book SET isbn = ? WHERE id LIKE ?;"
-		_, err = koboDB.Exec(updateString, isbn.ISBN13Number, "%"+b.BookID+"%")
-		log.Println("Updating content table with ISBN ->", isbn.ISBN13Number)
-
-		if err != nil {
-			log.Printf("Failed to update ISBN for book: %v", err)
-			return err, true
-		}
-
-	}
-	return nil, false
-}
-
 // fleshes out struct and associte book to hardcover
 func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 
 	var filters []string
-	if book.ISBN.ISBN13Number != "" {
-		filters = append(filters, fmt.Sprintf(`{isbn_13: {_eq: "%s"}}`, book.ISBN.ISBN13Number))
+	if book.SimpleISBN.ISBN13Number != "" {
+		filters = append(
+			filters,
+			fmt.Sprintf(`{isbn_13: {_eq: "%s"}}`, book.SimpleISBN.ISBN13Number),
+		)
 	}
-	if book.ISBN.ISBN10Number != "" {
-		filters = append(filters, fmt.Sprintf(`{isbn_10: {_eq: "%s"}}`, book.ISBN.ISBN10Number))
+	if book.SimpleISBN.ISBN10Number != "" {
+		filters = append(
+			filters,
+			fmt.Sprintf(`{isbn_10: {_eq: "%s"}}`, book.SimpleISBN.ISBN10Number),
+		)
 	}
 
 	orBlock := strings.Join(filters, ", ")
@@ -198,11 +116,12 @@ func (book *Book) koboToHardcover(client *http.Client, ctx context.Context) {
 		log.Fatalf("Failed to unmarshal response: %v", err)
 	}
 
+	// TODO: If i am populating the db first and then uploading quotes later, i don't need to persist this to structs???
 	if len(findBookResp.Data.Books) < 1 || len(findBookResp.Data.Books[0].Editions) < 1 {
 		log.Fatalf(
 			"Unable to ID Books from ISBN\nISBN10: %s\nISBN13: %s",
-			book.ISBN.ISBN10Number,
-			book.ISBN.ISBN13Number,
+			book.SimpleISBN.ISBN10Number,
+			book.SimpleISBN.ISBN13Number,
 		)
 	}
 
@@ -327,7 +246,7 @@ func (entry Bookmark) postEntry(
 // Initializes the environment, database, and retrieves the last opened book and its bookmarks.
 // This has a timing issue since the last opened book depends on when the KoboReader.sqlite database was last updated which may not be immediate after a book is opened.
 func init() {
-	log.Printf("Kscribbler v%s\n", version.Version)
+	log.Printf("Starting Kscribbler v%s\n", version.Version)
 
 	godotenv.Load("/mnt/onboard/.adds/kscribbler/config.env")
 	authToken = os.Getenv("HARDCOVER_API_TOKEN")

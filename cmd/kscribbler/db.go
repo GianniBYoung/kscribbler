@@ -13,6 +13,7 @@ import (
 )
 
 var koboDB *sqlx.DB
+var kscribblerDB *sqlx.DB
 var koboDBPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 var kscribblerDBPath = "/mnt/onboard/.adds/kscribbler.sqlite"
 
@@ -129,4 +130,88 @@ func populateBookTable() error {
 		return err
 	}
 	return nil
+}
+
+func loadQuotesFromDB() ([]Bookmark, error) {
+	var quotes []Bookmark
+	err := kscribblerDB.Select(&quotes, `
+		SELECT 
+			bookmark_id,
+			book_id,
+			quote,
+			annotation,
+			type,
+			kscribbler_uploaded
+		FROM quote
+		WHERE kscribbler_uploaded = 0;
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load quotes: %w", err)
+	}
+	return quotes, nil
+}
+
+// also do this with hardover ids
+// loop through all books with missing isbns and try to populate them from their quotes
+func updateDBWithISBNs() {
+
+	var books []Book
+	err := kscribblerDB.Select(&books, `SELECT book_id, isbn  FROM book WHERE isbn IS NULL;`)
+
+	if err != nil {
+		log.Printf("failed to load books with missing isbns: %w", err)
+	}
+
+	for _, book := range books {
+		quotes, err := loadQuotesFromDB()
+		if err != nil {
+			log.Printf("failed to load quotes for book %s: %v", book.BookID, err)
+			continue
+		}
+		book.Bookmarks = quotes
+		book.SetIsbnFromBook()
+	}
+
+}
+
+// loadBooksFromDB loads books with pending quotes from the kscribbler database
+// still need to figure out how to udpate the db with isbns from highlights
+// select all wehre isbn is null and then loop through the bookmarks via their id?
+func loadBooksFromDB() ([]Book, error) {
+	var books []Book
+
+	err := kscribblerDB.Select(&books, `
+		SELECT 
+			b.book_id,
+			b.book_title,
+			b.isbn,
+			b.hardcover_id,
+			b.hardcover_edition,
+			(SELECT COUNT(*) FROM quote q WHERE q.book_id = b.book_id AND q.kscribbler_uploaded = 0) AS pending_quotes
+		FROM book b
+		WHERE pending_quotes > 0
+		ORDER BY b.book_title;
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load books: %w", err)
+	}
+
+	for i := range books {
+		err := kscribblerDB.Select(&books[i].Bookmarks, `
+			SELECT 
+				bookmark_id,
+				book_id,
+				quote,
+				annotation,
+				type,
+				kscribbler_uploaded
+			FROM quote
+			WHERE book_id = ? AND kscribbler_uploaded = 0;
+		`, books[i].BookID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load bookmarks for book %s: %w", books[i].BookID, err)
+		}
+	}
+
+	return books, nil
 }
