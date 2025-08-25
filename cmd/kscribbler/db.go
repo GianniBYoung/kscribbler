@@ -7,6 +7,7 @@ import (
 
 	"os"
 
+	"github.com/GianniBYoung/simpleISBN"
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/jmoiron/sqlx"
@@ -58,7 +59,8 @@ func createKscribblerTables() error {
         book_id TEXT PRIMARY KEY NOT NULL,
         book_title TEXT NOT NULL,
 		isbn TEXT,
-		hardcover_id TEXT
+		hardcover_id INTEGER DEFAULT -1,
+		hardcover_edition INTEGER Default -1
     )
 `)
 	if err != nil {
@@ -73,12 +75,9 @@ func createKscribblerTables() error {
         quote TEXT NOT NULL,
         annotation TEXT,
         page INTEGER,
-		hardcover_id INTEGER Default -1,
-		hardcover_edition INTEGER Default -1,
 		type TEXT,
 		kscribbler_uploaded INTEGER DEFAULT 0,
         FOREIGN KEY(book_id) REFERENCES book(book_id),
-        FOREIGN KEY(hardcover_id) REFERENCES book(hardcover_id)
 		CONSTRAINT unique_trimmed_quote UNIQUE (quote)
     )
 `)
@@ -151,21 +150,54 @@ func loadQuotesFromDB() ([]Bookmark, error) {
 	return quotes, nil
 }
 
+// TODO: the isbn is not beign set yet
 func updateDBWithHardcoverInfo() {
 
 	var books []Book
-	//TODO: check this
 	err := kscribblerDB.Select(
 		&books,
-		`SELECT isbn FROM book WHERE hardcover_id OR hardcover_edition IS NULL;`,
+		`SELECT isbn FROM book WHERE (hardcover_id = -1 OR hardcover_edition = -1) AND isbn IS NOT NULL;`,
 	)
 
 	if err != nil {
 		log.Printf("failed to load books with missing hardcover info: %w", err)
 	}
 
+	log.Printf("Found %d books with missing hardcover info", len(books))
 	for _, book := range books {
+		//isbn 13 is breaking with 1230004555278
+		// 1230004555278 is not valid
+		isbn, err := simpleISBN.NewISBN(book.FoundISBN.String)
+		book.SimpleISBN = *isbn
+
+		if err != nil {
+			log.Printf("failed to parse isbn %s: %v", book.FoundISBN.String, err)
+			continue
+		}
+
 		book.koboToHardcover()
+		if book.SimpleISBN.ISBN10Number == "" && book.SimpleISBN.ISBN13Number == "" {
+			log.Printf("book %s has no valid isbn, skipping", book.Title.String)
+			continue
+		}
+		log.Printf(
+			"Updating book %s with hardcover info: %d, %d, %s, %s",
+			book.Title.String,
+			book.HardcoverID,
+			book.HardcoverEdition,
+			book.SimpleISBN.ISBN13Number,
+			book.SimpleISBN.ISBN10Number,
+		)
+		_, err = kscribblerDB.Exec(
+			`UPDATE book SET hardcover_id = ?, hardcover_edition = ? WHERE isbn = ? OR isbn = ?;`,
+			book.HardcoverID,
+			book.HardcoverEdition,
+			book.SimpleISBN.ISBN13Number,
+			book.SimpleISBN.ISBN10Number,
+		)
+		if err != nil {
+			log.Printf("failed to update book %s with hardcover info: %v", book.Title.String, err)
+		}
 	}
 
 }
@@ -174,10 +206,10 @@ func updateDBWithHardcoverInfo() {
 func updateDBWithISBNs() {
 
 	var books []Book
-	err := kscribblerDB.Select(&books, `SELECT book_id, isbn  FROM book WHERE isbn IS NULL;`)
+	err := kscribblerDB.Select(&books, `SELECT book_id, isbn FROM book WHERE isbn IS NULL;`)
 
 	if err != nil {
-		log.Printf("failed to load books with missing isbns: %w", err)
+		log.Printf("failed to load books with missing isbns: %v", err)
 	}
 
 	for _, book := range books {
@@ -190,11 +222,12 @@ func updateDBWithISBNs() {
 		book.SetIsbnFromBook()
 	}
 
+	// TODO: figure out overriding precedence - 1. annotation, 2. highlights 3. isbn from KoboDB
+	// current approach is only a passthrough of things missing isbn
+	// also want to make sure isbn 13 is stored
 }
 
 // loadBooksFromDB loads books with pending quotes from the kscribbler database
-// still need to figure out how to udpate the db with isbns from highlights
-// select all wehre isbn is null and then loop through the bookmarks via their id?
 func loadBooksFromDB() ([]Book, error) {
 	var books []Book
 
@@ -207,9 +240,11 @@ func loadBooksFromDB() ([]Book, error) {
 			b.hardcover_edition,
 			(SELECT COUNT(*) FROM quote q WHERE q.book_id = b.book_id AND q.kscribbler_uploaded = 0) AS pending_quotes
 		FROM book b
-		WHERE pending_quotes > 0
-		ORDER BY b.book_title;
-	`)
+		WHERE (SELECT COUNT(*) FROM quote q WHERE q.book_id = b.book_id AND q.kscribbler_uploaded = 0) > 0
+		AND b.hardcover_id IS NOT NULL
+		AND b.hardcover_edition IS NOT NULL
+		ORDER BY b.book_id;
+		`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load books: %w", err)
 	}

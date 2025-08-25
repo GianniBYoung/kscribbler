@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"regexp"
 	"strings"
@@ -9,19 +10,16 @@ import (
 	"github.com/GianniBYoung/simpleISBN"
 )
 
-type Hardcover struct {
-	BookID    int
-	EditionID int
-}
-
 // Represents a book entry from KoboReader.sqlite
 type Book struct {
-	BookID     string         `db:"book_id"`
-	Title      sql.NullString `db:"title"`
-	FoundISBN  sql.NullString `db:"isbn"`
-	SimpleISBN simpleISBN.ISBN
-	Bookmarks  []Bookmark
-	Hardcover  Hardcover
+	BookID           string         `db:"book_id"`
+	Title            sql.NullString `db:"book_title"`
+	FoundISBN        sql.NullString `db:"isbn"`
+	SimpleISBN       simpleISBN.ISBN
+	Bookmarks        []Bookmark
+	HardcoverID      int `db:"hardcover_id"`
+	HardcoverEdition int `db:"hardcover_edition"`
+	PendingQuotes    int `db:"pending_quotes"`
 }
 
 // Represents the KoboReader.sqlite for a quote or annotation.
@@ -121,4 +119,36 @@ func (book *Book) SetIsbnFromBook() (error, bool) {
 
 	}
 	return nil, false
+}
+
+// Print info about the book and its bookmarks
+func (book Book) String() string {
+	var result string
+
+	result += "\n========== Book ==========\n"
+	result += fmt.Sprintf("Title: %s\n", book.Title.String)
+	result += fmt.Sprintf("BookID: %s\n", book.BookID)
+	result += fmt.Sprintf("ISBN: %s", book.SimpleISBN.String())
+
+	result += "\n===== Hardcover Info =====\n"
+	result += fmt.Sprintf("HardcoverID: %d\n", book.HardcoverID)
+	result += fmt.Sprintf("EditionID: %d\n", book.HardcoverEdition)
+
+	result += "\n======== Bookmarks ========\n"
+	for i, bm := range book.Bookmarks {
+		result += fmt.Sprintf("[%d]\n", i+1)
+		result += fmt.Sprintf("BookmarkID: %s\n", bm.BookmarkID)
+		result += fmt.Sprintf("Type: %s\n", bm.Type)
+
+		if bm.Quote.Valid {
+			result += fmt.Sprintf("Quote: %s\n", bm.Quote.String)
+		}
+		if bm.Annotation.Valid {
+			result += fmt.Sprintf("Annotation: %s\n", bm.Annotation.String)
+		}
+
+		result += "--------------------------\n"
+	}
+
+	return result
 }

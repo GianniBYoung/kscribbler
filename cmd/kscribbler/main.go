@@ -12,49 +12,21 @@ import (
 	"strings"
 
 	"github.com/GianniBYoung/kscribbler/version"
-	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	_ "modernc.org/sqlite"
 )
 
 var authToken string
 
-// Print info about the book and its bookmarks
-func (book Book) String() string {
-	var result string
-
-	result += "\n========== Book ==========\n"
-	result += fmt.Sprintf("Title: %s\n", book.Title.String)
-	result += fmt.Sprintf("BookID: %s\n", book.BookID)
-	result += fmt.Sprintf("ISBN: %s", book.SimpleISBN.String())
-
-	result += "\n===== Hardcover Info =====\n"
-	result += fmt.Sprintf("HardcoverID: %d\n", book.Hardcover.BookID)
-	result += fmt.Sprintf("EditionID: %d\n", book.Hardcover.EditionID)
-
-	result += "\n======== Bookmarks ========\n"
-	for i, bm := range book.Bookmarks {
-		result += fmt.Sprintf("[%d]\n", i+1)
-		result += fmt.Sprintf("BookmarkID: %s\n", bm.BookmarkID)
-		result += fmt.Sprintf("Type: %s\n", bm.Type)
-
-		if bm.Quote.Valid {
-			result += fmt.Sprintf("Quote: %s\n", bm.Quote.String)
-		}
-		if bm.Annotation.Valid {
-			result += fmt.Sprintf("Annotation: %s\n", bm.Annotation.String)
-		}
-
-		result += "--------------------------\n"
-	}
-
-	return result
-}
-
 // fleshes out struct and assocites book to hardcover
 // TODO: Think about a more efficient query so i don't hammer the api
 // TODO: this also assumes a valid isbn already
 func (book *Book) koboToHardcover() {
+
+	if book.SimpleISBN.ISBN10Number == "" && book.SimpleISBN.ISBN13Number == "" {
+		log.Printf("Book %s has no valid ISBN to query Hardcover", book.BookID)
+		return
+	}
 
 	ctx := context.Background()
 
@@ -127,42 +99,21 @@ func (book *Book) koboToHardcover() {
 
 	// TODO: If i am populating the db first and then uploading quotes later, i don't need to persist this to structs???
 	if len(findBookResp.Data.Books) < 1 || len(findBookResp.Data.Books[0].Editions) < 1 {
-		log.Fatalf(
+		log.Printf(
 			"Unable to ID Books from ISBN\nISBN10: %s\nISBN13: %s",
 			book.SimpleISBN.ISBN10Number,
 			book.SimpleISBN.ISBN13Number,
 		)
-	}
+	} else {
 
-	book.Hardcover.BookID = findBookResp.Data.Books[0].ID
-	book.Hardcover.EditionID = findBookResp.Data.Books[0].Editions[0].ID
-	if book.updateHardcoverInfo() != nil {
-		log.Fatalf("Failed to update hardcover info in book table %v", err)
+		// set the hardcover info in the book struct for later use
+		book.HardcoverID = findBookResp.Data.Books[0].ID
+		book.HardcoverID = findBookResp.Data.Books[0].Editions[0].ID
 	}
 
 }
 
-func (book Book) updateHardcoverInfo() error {
-	if book.Hardcover.BookID != -1 || book.Hardcover.EditionID != -1 {
-		updateString := "UPDATE book SET hardcover_id = ?, hardcover_edition = ? WHERE id LIKE ?;"
-		_, err := koboDB.Exec(
-			updateString,
-			book.Hardcover.BookID,
-			book.Hardcover.EditionID,
-			"%"+book.BookID+"%",
-		)
-		if err != nil {
-			log.Printf(
-				"Failed to update hardcover_id and hardcover_edition for %s: %v",
-				book.Title.String,
-				err,
-			)
-		}
-	}
-	return nil
-}
-
-func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) bool {
+func (bm Bookmark) hasBeenUploaded() bool {
 	var isUploaded int
 
 	err := kscribblerDB.Get(&isUploaded, `
@@ -179,11 +130,13 @@ func (bm Bookmark) hasBeenUploaded(db *sqlx.DB) bool {
 }
 
 func (bm Bookmark) markAsUploaded() error {
-	_, err := koboDB.Exec(`
+	log.Printf("Marking bookmark %s as uploaded", bm.BookmarkID)
+	_, err := kscribblerDB.Exec(`
 		UPDATE quote
 		SET kscribbler_uploaded = 1
-		WHERE bookmark_id = ?
+		WHERE bookmark_id = ?;
 	`, bm.BookmarkID)
+	log.Printf("Marked bookmark %s as uploaded", bm.BookmarkID)
 	if err != nil {
 		return fmt.Errorf("failed to mark bookmark as uploaded: %w", err)
 	}
@@ -194,10 +147,11 @@ func (entry Bookmark) postEntry(
 	client *http.Client,
 	ctx context.Context,
 	hardcoverID int,
+	hardcoverEdition int,
 	spoiler bool,
 ) error {
 
-	if entry.hasBeenUploaded(kscribblerDB) {
+	if entry.hasBeenUploaded() {
 		return nil
 	}
 
@@ -221,12 +175,12 @@ func (entry Bookmark) postEntry(
 	mutation := fmt.Sprintf(`
 	mutation postquote {
     insert_reading_journal(
-    object: {book_id: %d, event: "%s", tags: {spoiler: %t, category: "%s", tag: ""}, entry: """%s""" }
+		object: {privacy_setting_id: 1, book_id: %d, edition_id: %d, event: "%s", tags: {spoiler: %t, category: "%s", tag: ""}, entry: """%s""" }
      ) {
     errors
   }
 }`,
-		hardcoverID, hardcoverType, spoiler,
+		hardcoverID, hardcoverEdition, hardcoverType, spoiler,
 		hardcoverType, entryText)
 
 	reqBody := map[string]string{"query": mutation}
@@ -277,18 +231,17 @@ func init() {
 	if err := populateBookTable(); err != nil {
 		log.Fatalf("Failed to populate kscribbler book table: %v", err)
 	}
-	log.Println("Book population done")
 
 	if err := populateQuoteTable(); err != nil {
 		log.Fatalf("Failed to populate kscribbler quote table: %v", err)
 	}
-	log.Println("Quote population done")
-	log.Println("Kscribbler init done")
 
 	kscribblerDB = connectKscribblerDB()
 	updateDBWithISBNs()
+	log.Println("Updated missing ISBNs in book table")
 
 	updateDBWithHardcoverInfo()
+	log.Println("Updated missing Hardcover info in book table")
 
 	kscribblerDB.Close()
 	log.Println("kscribblerDB initialized. Ready to upload quotes")
@@ -304,20 +257,29 @@ func main() {
 
 	kscribblerDB = connectKscribblerDB()
 
-	currentBook.koboToHardcover(client, ctx)
+	books, err := loadBooksFromDB()
 
-	//TODO: update this to handdle full library
-	for _, bm := range currentBook.Bookmarks {
-		err := bm.postEntry(
-			client,
-			ctx,
-			currentBook.Hardcover.BookID,
-			false,
-		)
-
-		if err != nil {
-			log.Printf("There was an error uploading quote to reading journal: %s\n", err)
-		}
+	if err != nil {
+		log.Fatalf("Failed to load books from database: %v", err)
 	}
-	log.Printf("Finished uploading bookmarks")
+
+	for _, currentBook := range books {
+		log.Printf("Processing book: %s\n", currentBook)
+		for _, bm := range currentBook.Bookmarks {
+			err := bm.postEntry(
+				client,
+				ctx,
+				currentBook.HardcoverID,
+				currentBook.HardcoverEdition,
+				false,
+			)
+			log.Printf("Uploaded bookmark: %s\n", bm.BookmarkID)
+
+			if err != nil {
+				log.Printf("There was an error uploading quote to reading journal: %s\n", err)
+			}
+		}
+		log.Printf("Finished uploading bookmarks for book: %s\n", currentBook.Title.String)
+	}
+
 }
