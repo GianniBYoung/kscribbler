@@ -29,11 +29,11 @@ func (book Book) String() string {
 
 	result += "\n========== Book ==========\n"
 	result += fmt.Sprintf("Title: %s\n", book.Title.String)
-	result += fmt.Sprintf("ContentID: %s\n", book.BookID)
+	result += fmt.Sprintf("BookID: %s\n", book.BookID)
 	result += fmt.Sprintf("ISBN: %s", book.ISBN)
 
 	result += "\n===== Hardcover Info =====\n"
-	result += fmt.Sprintf("BookID: %d\n", book.Hardcover.BookID)
+	result += fmt.Sprintf("HardcoverID: %d\n", book.Hardcover.BookID)
 	result += fmt.Sprintf("EditionID: %d\n", book.Hardcover.EditionID)
 
 	result += "\n======== Bookmarks ========\n"
@@ -71,7 +71,7 @@ func (b *Book) SetIsbnFromBook() (error, bool) {
 	isbn10Regex := regexp.MustCompile(`[0-9][-0-9]{8,12}[0-9Xx]`)
 	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
 
-	for i, bm := range b.Bookmarks {
+	for _, bm := range b.Bookmarks {
 		if !bm.Annotation.Valid ||
 			!strings.Contains(bm.Annotation.String, strings.ToLower("kscrib:")) {
 			continue
@@ -282,7 +282,7 @@ func (entry Bookmark) postEntry(
 	if entry.Type == "note" {
 		hardcoverType = "annotation"
 		entryText = fmt.Sprintf("%s\n\n============\n\n%s", quote, annotation)
-		fmt.Println(
+		log.Println(
 			"Skipping annotation upload until hardcover's api has better multiline support",
 			entryText,
 		)
