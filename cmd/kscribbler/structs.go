@@ -6,18 +6,9 @@ import (
 	"github.com/GianniBYoung/simpleISBN"
 )
 
-type PrivacyLevel int
-
-const (
-	PrivacyPublic    PrivacyLevel = 1
-	PrivacyFollowers PrivacyLevel = 2
-	PrivacyPrivate   PrivacyLevel = 3
-)
-
 type Hardcover struct {
-	BookID       int
-	EditionID    int
-	PrivacyLevel PrivacyLevel
+	BookID    int
+	EditionID int
 }
 
 // Represents a book entry from KoboReader.sqlite

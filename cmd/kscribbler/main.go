@@ -35,7 +35,6 @@ func (book Book) String() string {
 	result += "\n===== Hardcover Info =====\n"
 	result += fmt.Sprintf("BookID: %d\n", book.Hardcover.BookID)
 	result += fmt.Sprintf("EditionID: %d\n", book.Hardcover.EditionID)
-	result += fmt.Sprintf("PrivacyLevel: %d\n", book.Hardcover.PrivacyLevel)
 
 	result += "\n======== Bookmarks ========\n"
 	for i, bm := range book.Bookmarks {
@@ -267,7 +266,6 @@ func (entry Bookmark) postEntry(
 	ctx context.Context,
 	hardcoverID int,
 	spoiler bool,
-	privacyLevel PrivacyLevel,
 ) error {
 	isUploaded, err := entry.hasBeenUploaded(koboDB)
 	if err != nil {
@@ -304,13 +302,13 @@ func (entry Bookmark) postEntry(
 	mutation := fmt.Sprintf(`
 	mutation postquote {
     insert_reading_journal(
-    object: {book_id: %d, event: "%s", tags: {spoiler: %t, category: "%s", tag: ""}, entry: """%s""", privacy_setting_id: %d}
+    object: {book_id: %d, event: "%s", tags: {spoiler: %t, category: "%s", tag: ""}, entry: """%s""" }
      ) {
     errors
   }
 }`,
 		hardcoverID, hardcoverType, spoiler,
-		hardcoverType, entryText, privacyLevel)
+		hardcoverType, entryText)
 
 	reqBody := map[string]string{"query": mutation}
 	bodyBytes, _ := json.Marshal(reqBody)
@@ -387,7 +385,6 @@ func main() {
 	// 		ctx,
 	// 		currentBook.Hardcover.BookID,
 	// 		false,
-	// 		currentBook.Hardcover.PrivacyLevel,
 	// 	)
 	//
 	// 	if err != nil {
