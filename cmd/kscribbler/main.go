@@ -19,6 +19,7 @@ import (
 
 var authToken string
 var stopAfterInit bool
+var markAllAsUploaded bool
 
 // TODO: Think about a more efficient query so i don't hammer the api
 // fleshes out struct and assocites book to hardcover
@@ -227,11 +228,31 @@ func init() {
 
 func main() {
 	flag.BoolVar(&stopAfterInit, "init", false, "Stop execution after init() runs")
+	flag.BoolVar(
+		&markAllAsUploaded,
+		"mark-all-as-uploaded",
+		false,
+		"Mark all quotes in the database as uploaded (useful for migration)",
+	)
 	flag.Parse()
 	if stopAfterInit {
 		log.Println(
 			"The init flag was set; stopping execution after database initialization. Quotes will not be uploaded.",
 		)
+		os.Exit(0)
+	}
+
+	if markAllAsUploaded {
+		log.Println(
+			"The mark-all-as-uploaded flag was set; marking all quotes in kscribblerDB as uploaded. Quotes will not be uploaded.",
+		)
+		kscribblerDB = connectKscribblerDB()
+		_, err := kscribblerDB.Exec(` UPDATE quote SET kscribbler_uploaded = 1;`)
+
+		if err != nil {
+			log.Fatalf("failed to mark all quotes as uploaded in kscribblerDB: %v", err)
+		}
+		log.Println("All quotes marked as uploaded. Exiting.")
 		os.Exit(0)
 	}
 
