@@ -33,7 +33,9 @@ I would like to make this over-the-air (OTA) updatable in the future, but the wa
 ## Usage
 
 Once installed `nickelmenu` should have a new entry in the right corner of reading view that will trigger a sync when clicked.
-To save some battery and resources the sync is only ran against the current/last opened book.
+
+This will trigger `kscribbler` to generate its database of quotes and upload them to hardcover.app.
+WARNING: This will attempt to upload all quotes from all books on the device. If you want to tame this you will need to manipulate the `kscribblerdb` yourself. More info below.
 
 The quotes are uploaded to hardcover.app based on the book's ISBN. See the note below or the troubleshooting section if quotes are not being uploaded.
 
@@ -44,13 +46,20 @@ The quotes are uploaded to hardcover.app based on the book's ISBN. See the note 
 ## Troubleshooting
 - Logs are stored in `/mnt/onboard/.adds/kscribbler/kscribbler.log`
 - If you are having issues with the quotes not being uploaded, check that hardcover.app has an edition for the ISBN.
-- This project depends on the `KoboReader.sqlite` database to be up to date. This typically means a successful sync is required for the DB to actually write from memory to disk.
-  - This leads to some annoying timing issues. I would recommend running the program after a sync and reboot if you are having trouble uploading quotes.
-- For the savvy the sqlite db is located at`/mnt/onboard/.kobo/KoboReader.sqlite`
-  - You can modify this database to add an ISBN to a book if you know what you're doing
-  - `telnet/ssh` into the kobo is possible and allows for manually running `kscribbler` if so desired
+
+## Advanced Usage
+- The database of quotes is stored at `/mnt/onboard/.adds/kscribbler/kscribblerdb`
+- This is a sqlite database with two tables: `books` and `quotes`
+- You can manipulate this database directly if you want to control what gets uploaded by setting `kscribbler_uploaded` to `1` for quotes you don't want uploaded
+- `telnet/ssh` into the kobo is possible and allows for manually running `kscribbler` if so desired
+- From the command line you can run `kscribbler --help` to see available options
+  - `kscribbler --init` will initialize the database but not upload anything
+  - `kscribbler --mark-all-as-uploaded` will initialize the database, mark all found quotes as upload but will not upload anything
+    - Useful for testing/migrating
+
 
 ## Contributing
+- Star the repository ⭐
 - File bug reports
 - Submit pull requests
 - Suggest improvements
