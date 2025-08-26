@@ -92,6 +92,7 @@ func (book *Book) koboToHardcover() {
 		log.Println("Raw response:\n", string(rawResp))
 		log.Fatalf("Failed to unmarshal response: %v", err)
 	}
+	fmt.Printf("Hardcover response: %+v\n", findBookResp)
 
 	if len(findBookResp.Data.Books) < 1 || len(findBookResp.Data.Books[0].Editions) < 1 {
 		log.Printf(
@@ -103,7 +104,7 @@ func (book *Book) koboToHardcover() {
 
 		// set the hardcover info in the book struct for later use
 		book.HardcoverID = findBookResp.Data.Books[0].ID
-		book.HardcoverID = findBookResp.Data.Books[0].Editions[0].ID
+		book.HardcoverEdition = findBookResp.Data.Books[0].Editions[0].ID
 	}
 
 }
