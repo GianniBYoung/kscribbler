@@ -59,13 +59,13 @@ func (book *Book) SetIsbnFromBook() bool {
 			continue
 		}
 
-		var isbnCanidate string
+		var isbnCandidate string
 		if bm.Type == "note" {
-			isbnCanidate = strings.TrimSpace(bm.Annotation.String)
+			isbnCandidate = strings.TrimSpace(bm.Annotation.String)
 		} else {
-			isbnCanidate = strings.TrimSpace(bm.Quote.String)
+			isbnCandidate = strings.TrimSpace(bm.Quote.String)
 		}
-		isbnCanidate = strings.ToLower(isbnCanidate)
+		isbnCandidate = strings.ToLower(isbnCandidate)
 
 		var isbnCleaner = strings.NewReplacer(
 			" ", "",
