@@ -13,7 +13,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-var koboDB *sqlx.DB
 var kscribblerDB *sqlx.DB
 var koboDBPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
 var kscribblerDBPath = "/mnt/onboard/.adds/kscribbler.sqlite"

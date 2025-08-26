@@ -110,7 +110,7 @@ func (book *Book) SetIsbnFromBook() bool {
 
 		// update the book table with the new isbn
 		updateString := "UPDATE book SET isbn = ? WHERE id LIKE ?;"
-		_, err = koboDB.Exec(updateString, isbn.ISBN13Number, "%"+book.BookID+"%")
+		_, err = kscribblerDB.Exec(updateString, isbn.ISBN13Number, "%"+book.BookID+"%")
 		log.Println("Updating content table with ISBN ->", isbn.ISBN13Number)
 
 		if err != nil {
