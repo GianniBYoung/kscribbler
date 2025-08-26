@@ -30,7 +30,7 @@ func connectKscribblerDB() *sqlx.DB {
 	return kscribblerDB
 }
 
-// Read kobosqlite and populate kscribbler sqlite with relevant data
+// connectDatabases attaches kscribblerDB to KoboReaderDB in order to populate kscribblerDB with relevant data.
 func connectDatabases() *sqlx.DB {
 	kscribblerDB := connectKscribblerDB()
 	// attach to kobo database also
@@ -42,7 +42,7 @@ func connectDatabases() *sqlx.DB {
 	return kscribblerDB
 }
 
-// createKscribblerTables creates the SQLite database file if it doesn't exist
+// createKscribblerTables creates the SQLite database if it doesn't exist.
 func createKscribblerTables() {
 	if _, err := os.Stat(kscribblerDBPath); err == nil {
 		return
@@ -86,6 +86,7 @@ func createKscribblerTables() {
 
 }
 
+// populateQuoteTable populates the quote table in kscribblerDB with quotes and annotations from KoboReader.sqlite.
 func populateQuoteTable() {
 	kscribblerDB := connectDatabases()
 	defer kscribblerDB.Close()
@@ -107,6 +108,7 @@ func populateQuoteTable() {
 	}
 }
 
+// populateBookTable populates the book table in kscribblerDB with book identifiers from KoboReader.sqlite.
 func populateBookTable() {
 	kscribblerDB := connectDatabases()
 	defer kscribblerDB.Close()
@@ -125,6 +127,7 @@ func populateBookTable() {
 	}
 }
 
+// loadQuotesFromDB loads quotes and annotations from the kscribblerDB that have not been uploaded yet.
 func loadQuotesFromDB() ([]Bookmark, error) {
 	var quotes []Bookmark
 	err := kscribblerDB.Select(&quotes, `
@@ -144,6 +147,7 @@ func loadQuotesFromDB() ([]Bookmark, error) {
 	return quotes, nil
 }
 
+// updateDBWithHardcoverInfo updates the kscribblerDB with missing hardcover info from Hardcover API.
 func updateDBWithHardcoverInfo() {
 
 	var books []Book
@@ -191,7 +195,7 @@ func updateDBWithHardcoverInfo() {
 	log.Println("Updated missing Hardcover info in book table")
 }
 
-// loop through all books with missing isbns and try to populate them from their quotes
+// updateDBWithISBNs loops through all books with missing isbns and tries to populate them from their quotes and annotations.
 func updateDBWithISBNs() {
 
 	var books []Book
@@ -220,7 +224,7 @@ func updateDBWithISBNs() {
 	// also want to make sure isbn 13 is stored
 }
 
-// loadBooksFromDB loads books with pending quotes from the kscribbler database
+// loadBooksFromDB loads books with pending quotes from the kscribbler database.
 func loadBooksFromDB() []Book {
 	var books []Book
 

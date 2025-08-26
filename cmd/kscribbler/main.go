@@ -21,9 +21,9 @@ var authToken string
 var stopAfterInit bool
 var markAllAsUploaded bool
 
-// TODO: Think about a more efficient query so i don't hammer the api
-// fleshes out struct and assocites book to hardcover
+// koboToHardcover fleshes out struct and assocites book to hardcover.
 func (book *Book) koboToHardcover() {
+	// TODO: Think about a more efficient query so i don't hammer the api
 
 	// this also assumes a valid isbn already
 	if book.SimpleISBN.ISBN10Number == "" && book.SimpleISBN.ISBN13Number == "" {
@@ -109,6 +109,7 @@ func (book *Book) koboToHardcover() {
 
 }
 
+// hasBeenUploaded checks if the bookmark has already been uploaded to Hardcover by querying the kscribblerDB.
 func (bm Bookmark) hasBeenUploaded() bool {
 	var isUploaded int
 
@@ -125,6 +126,7 @@ func (bm Bookmark) hasBeenUploaded() bool {
 	return isUploaded != 0
 }
 
+// markAsUploaded updates the kscribblerDB to mark the quote as uploaded.
 func (bm Bookmark) markAsUploaded() {
 	log.Printf("Marking bookmark %s as uploaded", bm.BookmarkID)
 	_, err := kscribblerDB.Exec(`
@@ -139,6 +141,7 @@ func (bm Bookmark) markAsUploaded() {
 	log.Printf("Marked bookmark %s as uploaded", bm.BookmarkID)
 }
 
+// postEntry uploads the bookmark (quote or annotation) to Hardcover using their GraphQL API.
 func (entry Bookmark) postEntry(
 	client *http.Client,
 	ctx context.Context,

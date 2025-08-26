@@ -15,7 +15,7 @@ var hardcoverCert []byte
 
 const apiURL = "https://api.hardcover.app/v1/graphql"
 
-// http client with embedded CA bundle for api.hardcover.app
+// newHTTPClient with embedded CA bundle for api.hardcover.app
 func newHTTPClient() *http.Client {
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(hardcoverCert) {
@@ -28,6 +28,7 @@ func newHTTPClient() *http.Client {
 	return &http.Client{Transport: transport}
 }
 
+// newHardcoverRequest creates a new HTTP request to the Hardcover API with the appropriate headers.
 func newHardcoverRequest(ctx context.Context, body []byte) *http.Request {
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(body))
 	if err != nil {

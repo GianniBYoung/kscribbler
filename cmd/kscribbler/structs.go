@@ -48,7 +48,7 @@ type Response struct {
 	} `json:"data"`
 }
 
-// Attempts to extract an ISBN from the book's highlights (if it is a highlighted ISBN) or notes beginning with `kscrib:`. Returns true if an ISBN was found and set
+// SetIsbnFromBook attempts to extract an ISBN from the book's highlights (if it is a highlighted ISBN) or notes beginning with `kscrib:`. Returns true if an ISBN was found and set
 func (book *Book) SetIsbnFromBook() bool {
 	isbn10Regex := regexp.MustCompile(`[0-9][-0-9]{8,12}[0-9Xx]`)
 	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
