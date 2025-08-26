@@ -20,11 +20,11 @@ var kscribblerDBPath = "/mnt/onboard/.adds/kscribbler.sqlite"
 
 // connectKscribblerDB connects to the kscribbler SQLite database and creates it if it doesn't exist.
 func connectKscribblerDB() *sqlx.DB {
-	dbErrMsG := "failed to open database at %s: %w"
+	dbErrMsg := "failed to open database at %s: %w"
 
 	kscribblerDB, err := sqlx.Open("sqlite3", kscribblerDBPath)
 	if err != nil {
-		err := fmt.Errorf(dbErrMsG, kscribblerDBPath, err)
+		err := fmt.Errorf(dbErrMsg, kscribblerDBPath, err)
 		log.Fatal(err.Error())
 	}
 	return kscribblerDB
