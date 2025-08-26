@@ -144,7 +144,6 @@ func loadQuotesFromDB() ([]Bookmark, error) {
 	return quotes, nil
 }
 
-// TODO: the isbn is not beign set yet
 func updateDBWithHardcoverInfo() {
 
 	var books []Book
@@ -154,14 +153,12 @@ func updateDBWithHardcoverInfo() {
 	)
 
 	if err != nil {
-		log.Printf("failed to load books with missing hardcover info: %w", err)
+		log.Printf("failed to load books with missing hardcover info: %v", err)
 		return
 	}
 
 	log.Printf("Found %d books with missing hardcover info", len(books))
 	for _, book := range books {
-		//isbn 13 is breaking with 1230004555278 (silent spring)
-		// 1230004555278 is not valid
 		isbn, err := simpleISBN.NewISBN(book.FoundISBN.String)
 		if err != nil {
 			log.Printf("failed to parse isbn %s: %v", book.FoundISBN.String, err)
@@ -170,10 +167,7 @@ func updateDBWithHardcoverInfo() {
 		book.SimpleISBN = *isbn
 
 		book.koboToHardcover()
-		if book.SimpleISBN.ISBN10Number == "" && book.SimpleISBN.ISBN13Number == "" {
-			log.Printf("book %s has no valid isbn, skipping", book.Title.String)
-			continue
-		}
+
 		log.Printf(
 			"Updating book %s with hardcover info: %d, %d, %s, %s",
 			book.Title.String,
@@ -215,7 +209,9 @@ func updateDBWithISBNs() {
 			continue
 		}
 		book.Bookmarks = quotes
-		book.SetIsbnFromBook()
+		if !book.SetIsbnFromBook() {
+			continue
+		}
 	}
 
 	log.Println("Updated missing ISBNs in book table")

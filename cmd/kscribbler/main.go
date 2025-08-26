@@ -31,7 +31,6 @@ func (book *Book) koboToHardcover() {
 	}
 
 	ctx := context.Background()
-
 	client := newHTTPClient()
 
 	var filters []string
@@ -124,18 +123,18 @@ func (bm Bookmark) hasBeenUploaded() bool {
 	return isUploaded != 0
 }
 
-func (bm Bookmark) markAsUploaded() error {
+func (bm Bookmark) markAsUploaded() {
 	log.Printf("Marking bookmark %s as uploaded", bm.BookmarkID)
 	_, err := kscribblerDB.Exec(`
 		UPDATE quote
 		SET kscribbler_uploaded = 1
 		WHERE bookmark_id = ?;
 	`, bm.BookmarkID)
-	log.Printf("Marked bookmark %s as uploaded", bm.BookmarkID)
+
 	if err != nil {
-		return fmt.Errorf("failed to mark bookmark as uploaded: %w", err)
+		log.Fatalf("failed to mark bookmark as uploaded: %v", err)
 	}
-	return nil
+	log.Printf("Marked bookmark %s as uploaded", bm.BookmarkID)
 }
 
 func (entry Bookmark) postEntry(
@@ -190,10 +189,7 @@ func (entry Bookmark) postEntry(
 
 	rawResp, _ := io.ReadAll(resp.Body)
 	fmt.Println("Hardcover response:", string(rawResp))
-	err = entry.markAsUploaded()
-	if err != nil {
-		log.Printf("Failed to mark entry as uploaded in kscribblerDB: %v", err)
-	}
+	entry.markAsUploaded()
 
 	return nil
 }
@@ -265,5 +261,5 @@ func main() {
 		}
 		log.Printf("Finished uploading bookmarks for book: %s\n", currentBook.Title.String)
 	}
-
+	log.Println("Job done!")
 }

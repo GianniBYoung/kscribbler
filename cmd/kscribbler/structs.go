@@ -48,8 +48,8 @@ type Response struct {
 	} `json:"data"`
 }
 
-// Attempts to extract an ISBN from the book's highlights (if it is a highlighted ISBN) or notes beginning with `kscrib:`.
-func (book *Book) SetIsbnFromBook() (error, bool) {
+// Attempts to extract an ISBN from the book's highlights (if it is a highlighted ISBN) or notes beginning with `kscrib:`. Returns true if an ISBN was found and set
+func (book *Book) SetIsbnFromBook() bool {
 	isbn10Regex := regexp.MustCompile(`[0-9][-0-9]{8,12}[0-9Xx]`)
 	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
 
@@ -103,7 +103,8 @@ func (book *Book) SetIsbnFromBook() (error, bool) {
 
 		isbn, err = simpleISBN.NewISBN(match)
 		if err != nil {
-			log.Fatalf("ISBN matched from highlight/note but failed to parse:\n%s\n%s", match, err)
+			log.Printf("ISBN matched from highlight/note but failed to parse:\n%s\n%s", match, err)
+			return false
 		}
 		book.SimpleISBN = *isbn
 
@@ -113,12 +114,12 @@ func (book *Book) SetIsbnFromBook() (error, bool) {
 		log.Println("Updating content table with ISBN ->", isbn.ISBN13Number)
 
 		if err != nil {
-			log.Printf("Failed to update ISBN for book: %v", err)
-			return err, true
+			log.Printf("Failed to update kscribblerDB ISBN for %s: %v", book.Title.String, err)
+			return false
 		}
 
 	}
-	return nil, false
+	return true
 }
 
 // Print info about the book and its bookmarks
