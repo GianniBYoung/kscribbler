@@ -79,23 +79,23 @@ func (book *Book) SetIsbnFromBook() bool {
 			"electronic", "",
 			"book", "",
 		)
-		isbnCanidate = isbnCleaner.Replace(isbnCanidate)
+		isbnCandidate = isbnCleaner.Replace(isbnCandidate)
 
 		// Ignore if the highlight is very long (user probably highlighted a sentence)
-		if len(isbnCanidate) > 55 {
+		if len(isbnCandidate) > 55 {
 			continue
 		}
 
 		var isbn *simpleISBN.ISBN
 		var err error
 		var match string
-		log.Println("Checking for ISBN in: ", isbnCanidate)
-		if isbn13Regex.MatchString(isbnCanidate) {
+		log.Println("Checking for ISBN in: ", isbnCandidate)
+		if isbn13Regex.MatchString(isbnCandidate) {
 			log.Println("Found ISBN-13")
-			match = isbn13Regex.FindString(isbnCanidate)
-		} else if isbn10Regex.MatchString(isbnCanidate) {
+			match = isbn13Regex.FindString(isbnCandidate)
+		} else if isbn10Regex.MatchString(isbnCandidate) {
 			log.Println("Found ISBN-10")
-			match = isbn10Regex.FindString(isbnCanidate)
+			match = isbn10Regex.FindString(isbnCandidate)
 		} else {
 			continue
 		}
