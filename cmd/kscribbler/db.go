@@ -126,26 +126,6 @@ func populateBookTable() {
 	}
 }
 
-// loadQuotesFromDB loads quotes and annotations from the kscribblerDB that have not been uploaded yet.
-func loadQuotesFromDB() ([]Bookmark, error) {
-	var quotes []Bookmark
-	err := kscribblerDB.Select(&quotes, `
-		SELECT 
-			bookmark_id,
-			book_id,
-			quote,
-			annotation,
-			type,
-			kscribbler_uploaded
-		FROM quote
-		WHERE kscribbler_uploaded = 0;
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load quotes: %w", err)
-	}
-	return quotes, nil
-}
-
 // updateDBWithHardcoverInfo updates the kscribblerDB with missing hardcover info from Hardcover API.
 func updateDBWithHardcoverInfo() {
 
@@ -206,7 +186,18 @@ func updateDBWithISBNs() {
 	}
 
 	for _, book := range books {
-		quotes, err := loadQuotesFromDB()
+		var quotes []Bookmark
+		err := kscribblerDB.Select(&quotes, `
+			SELECT 
+				bookmark_id,
+				book_id,
+				quote,
+				annotation,
+				type,
+				kscribbler_uploaded
+			FROM quote
+			WHERE book_id = ?;
+		`, book.BookID)
 		if err != nil {
 			log.Printf("failed to load quotes for book %s: %v", book.BookID, err)
 			continue
