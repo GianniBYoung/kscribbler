@@ -1,2 +1,0 @@
-KERNEL=="eth*", ACTION=="add", RUN+="/opt/bin/kscribbler"
-KERNEL=="wlan*", ACTION=="add", RUN+="/opt/bin/kscribbler"
