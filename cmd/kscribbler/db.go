@@ -163,12 +163,11 @@ func updateDBWithHardcoverInfo() {
 		//isbn 13 is breaking with 1230004555278 (silent spring)
 		// 1230004555278 is not valid
 		isbn, err := simpleISBN.NewISBN(book.FoundISBN.String)
-		book.SimpleISBN = *isbn
-
 		if err != nil {
 			log.Printf("failed to parse isbn %s: %v", book.FoundISBN.String, err)
 			continue
 		}
+		book.SimpleISBN = *isbn
 
 		book.koboToHardcover()
 		if book.SimpleISBN.ISBN10Number == "" && book.SimpleISBN.ISBN13Number == "" {
