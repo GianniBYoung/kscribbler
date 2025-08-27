@@ -14,7 +14,7 @@ import (
 
 var kscribblerDB *sqlx.DB
 var koboDBPath = "/mnt/onboard/.kobo/KoboReader.sqlite"
-var kscribblerDBPath = "/mnt/onboard/.adds/kscribbler.sqlite"
+var kscribblerDBPath = "/mnt/onboard/.adds/kscribbler/kscribbler.sqlite"
 
 // connectKscribblerDB connects to the kscribbler SQLite database and creates it if it doesn't exist.
 func connectKscribblerDB() *sqlx.DB {
@@ -43,6 +43,7 @@ func connectDatabases() *sqlx.DB {
 // createKscribblerTables creates the SQLite database if it doesn't exist.
 func createKscribblerTables() {
 	if _, err := os.Stat(kscribblerDBPath); err == nil {
+		log.Printf("kscribblerDB already exists at %s, skipping creation", kscribblerDBPath)
 		return
 	} else if !errors.Is(err, os.ErrNotExist) {
 		log.Fatalf("Error while trying to create/open kscribblerDB: %v", err)
