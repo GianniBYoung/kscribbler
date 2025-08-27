@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/GianniBYoung/simpleISBN"
-	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -21,7 +20,7 @@ var kscribblerDBPath = "/mnt/onboard/.adds/kscribbler.sqlite"
 func connectKscribblerDB() *sqlx.DB {
 	dbErrMsg := "failed to open database at %s: %w"
 
-	kscribblerDB, err := sqlx.Open("sqlite3", kscribblerDBPath)
+	kscribblerDB, err := sqlx.Open("sqlite", kscribblerDBPath)
 	if err != nil {
 		err := fmt.Errorf(dbErrMsg, kscribblerDBPath, err)
 		log.Fatal(err.Error())
