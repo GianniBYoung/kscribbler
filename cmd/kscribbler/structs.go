@@ -54,19 +54,18 @@ func (book *Book) SetIsbnFromBook() bool {
 	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
 
 	for _, bm := range book.Bookmarks {
-		if !bm.Annotation.Valid ||
-			!strings.Contains(bm.Annotation.String, strings.ToLower("kscrib:")) {
-			continue
-		}
-
 		var isbnCandidate string
-		if bm.Type == "note" {
+		if bm.Type == "note" && bm.Annotation.Valid {
+			if !strings.Contains(bm.Annotation.String, strings.ToLower("kscrib:")) {
+				continue
+			}
 			isbnCandidate = strings.TrimSpace(bm.Annotation.String)
 		} else {
 			isbnCandidate = strings.TrimSpace(bm.Quote.String)
 		}
 		isbnCandidate = strings.ToLower(isbnCandidate)
 
+		// probs make this a const for fun
 		var isbnCleaner = strings.NewReplacer(
 			" ", "",
 			"-", "",
@@ -93,25 +92,30 @@ func (book *Book) SetIsbnFromBook() bool {
 		var match string
 		log.Println("Checking for ISBN in: ", isbnCandidate)
 		if isbn13Regex.MatchString(isbnCandidate) {
-			log.Println("Found ISBN-13")
 			match = isbn13Regex.FindString(isbnCandidate)
 		} else if isbn10Regex.MatchString(isbnCandidate) {
-			log.Println("Found ISBN-10")
 			match = isbn10Regex.FindString(isbnCandidate)
 		} else {
 			continue
 		}
-		log.Println(match)
 
 		isbn, err = simpleISBN.NewISBN(match)
 		if err != nil {
 			log.Printf("ISBN matched from highlight/note but failed to parse:\n%s\n%s", match, err)
 			return false
 		}
+
 		book.SimpleISBN = *isbn
 
+		log.Printf(
+			"Found ISBN for book %s: %s (from bookmark %s)",
+			book.BookID,
+			isbn.ISBN13Number,
+			bm.BookmarkID,
+		)
+
 		// update the book table with the new isbn
-		updateString := "UPDATE book SET isbn = ? WHERE id LIKE ?;"
+		updateString := "UPDATE book SET isbn = ? WHERE book_id LIKE ?;"
 		_, err = kscribblerDB.Exec(updateString, isbn.ISBN13Number, "%"+book.BookID+"%")
 		log.Println("Updating content table with ISBN ->", isbn.ISBN13Number)
 

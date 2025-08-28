@@ -203,9 +203,7 @@ func updateDBWithISBNs() {
 			continue
 		}
 		book.Bookmarks = quotes
-		if !book.SetIsbnFromBook() {
-			continue
-		}
+		book.SetIsbnFromBook()
 	}
 
 	log.Println("Updated missing ISBNs in book table")
