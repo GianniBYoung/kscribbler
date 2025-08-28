@@ -2,43 +2,34 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
+	"log"
+	"regexp"
+	"strings"
 
 	"github.com/GianniBYoung/simpleISBN"
 )
 
-type PrivacyLevel int
-
-const (
-	PrivacyPublic    PrivacyLevel = 1
-	PrivacyFollowers PrivacyLevel = 2
-	PrivacyPrivate   PrivacyLevel = 3
-)
-
-type Hardcover struct {
-	BookID       int
-	EditionID    int
-	PrivacyLevel PrivacyLevel
-}
-
 // Represents a book entry from KoboReader.sqlite
 type Book struct {
-	ContentID string         `db:"ContentID"`
-	Title     sql.NullString `db:"Title"`
-	KoboISBN  sql.NullString `db:"ISBN"`
-	ISBN      simpleISBN.ISBN
-	Bookmarks []Bookmark
-	Hardcover Hardcover
+	BookID           string         `db:"book_id"`
+	Title            sql.NullString `db:"book_title"`
+	FoundISBN        sql.NullString `db:"isbn"`
+	SimpleISBN       simpleISBN.ISBN
+	Bookmarks        []Bookmark
+	HardcoverID      int `db:"hardcover_id"`
+	HardcoverEdition int `db:"hardcover_edition"`
+	PendingQuotes    int `db:"pending_quotes"`
 }
 
 // Represents the KoboReader.sqlite for a quote or annotation.
 type Bookmark struct {
-	BookmarkID         string         `db:"BookmarkID"`
-	ContentID          string         `db:"ContentID"`
-	Quote              sql.NullString `db:"Text"`
-	Annotation         sql.NullString `db:"Annotation"`
-	Type               string         `db:"Type"`
-	ChapterTitle       sql.NullString `db:"ChapterTitle"`
-	KscribblerUploaded bool           `db:"KscribblerUploaded"`
+	BookmarkID         string         `db:"bookmark_id"`
+	BookID             string         `db:"book_id"`
+	Quote              sql.NullString `db:"quote"`
+	Annotation         sql.NullString `db:"annotation"`
+	Type               string         `db:"type"`
+	KscribblerUploaded bool           `db:"kscribbler_uploaded"`
 }
 
 // http response structure supporting books and reading journal insertions for hardcover.app
@@ -55,4 +46,116 @@ type Response struct {
 			Errors *string `json:"errors"`
 		} `json:"insert_reading_journal"`
 	} `json:"data"`
+}
+
+// SetIsbnFromBook attempts to extract an ISBN from the book's highlights (if it is a highlighted ISBN) or notes beginning with `kscrib:`. Returns true if an ISBN was found and set
+func (book *Book) SetIsbnFromBook() bool {
+	isbn10Regex := regexp.MustCompile(`[0-9][-0-9]{8,12}[0-9Xx]`)
+	isbn13Regex := regexp.MustCompile(`97[89][-0-9]{10,16}`)
+
+	for _, bm := range book.Bookmarks {
+		var isbnCandidate string
+		if bm.Type == "note" && bm.Annotation.Valid {
+			if !strings.Contains(bm.Annotation.String, strings.ToLower("kscrib:")) {
+				continue
+			}
+			isbnCandidate = strings.TrimSpace(bm.Annotation.String)
+		} else {
+			isbnCandidate = strings.TrimSpace(bm.Quote.String)
+		}
+		isbnCandidate = strings.ToLower(isbnCandidate)
+
+		// probs make this a const for fun
+		var isbnCleaner = strings.NewReplacer(
+			" ", "",
+			"-", "",
+			"isbn", "",
+			"isbns", "",
+			":", "",
+			"(", "",
+			")", "",
+			"e-book", "",
+			"ebook", "",
+			"kscrib:", "",
+			"electronic", "",
+			"book", "",
+		)
+		isbnCandidate = isbnCleaner.Replace(isbnCandidate)
+
+		// Ignore if the highlight is very long (user probably highlighted a sentence)
+		if len(isbnCandidate) > 55 {
+			continue
+		}
+
+		var isbn *simpleISBN.ISBN
+		var err error
+		var match string
+		log.Println("Checking for ISBN in: ", isbnCandidate)
+		if isbn13Regex.MatchString(isbnCandidate) {
+			match = isbn13Regex.FindString(isbnCandidate)
+		} else if isbn10Regex.MatchString(isbnCandidate) {
+			match = isbn10Regex.FindString(isbnCandidate)
+		} else {
+			continue
+		}
+
+		isbn, err = simpleISBN.NewISBN(match)
+		if err != nil {
+			log.Printf("ISBN matched from highlight/note but failed to parse:\n%s\n%s", match, err)
+			return false
+		}
+
+		book.SimpleISBN = *isbn
+
+		log.Printf(
+			"Found ISBN for book %s: %s (from bookmark %s)",
+			book.BookID,
+			isbn.ISBN13Number,
+			bm.BookmarkID,
+		)
+
+		// update the book table with the new isbn
+		updateString := "UPDATE book SET isbn = ? WHERE book_id LIKE ?;"
+		_, err = kscribblerDB.Exec(updateString, isbn.ISBN13Number, "%"+book.BookID+"%")
+		log.Println("Updating content table with ISBN ->", isbn.ISBN13Number)
+
+		if err != nil {
+			log.Printf("Failed to update kscribblerDB ISBN for %s: %v", book.Title.String, err)
+			return false
+		}
+
+	}
+	return true
+}
+
+// Print info about the book and its bookmarks
+func (book Book) String() string {
+	var result string
+
+	result += "\n========== Book ==========\n"
+	result += fmt.Sprintf("Title: %s\n", book.Title.String)
+	result += fmt.Sprintf("BookID: %s\n", book.BookID)
+	result += fmt.Sprintf("ISBN: %s", book.SimpleISBN.String())
+
+	result += "\n===== Hardcover Info =====\n"
+	result += fmt.Sprintf("HardcoverID: %d\n", book.HardcoverID)
+	result += fmt.Sprintf("EditionID: %d\n", book.HardcoverEdition)
+
+	result += "\n======== Bookmarks ========\n"
+	for i, bm := range book.Bookmarks {
+		result += fmt.Sprintf("[%d]\n", i+1)
+		result += fmt.Sprintf("BookmarkID: %s\n", bm.BookmarkID)
+		result += fmt.Sprintf("Type: %s\n", bm.Type)
+
+		if bm.Quote.Valid {
+			result += fmt.Sprintf("Quote: %s\n", bm.Quote.String)
+		}
+		if bm.Annotation.Valid {
+			result += fmt.Sprintf("Annotation: %s\n", bm.Annotation.String)
+		}
+
+		result += "--------------------------\n"
+	}
+
+	return result
 }
