@@ -71,6 +71,8 @@ func (book *Book) SetIsbnFromBook() bool {
 			" ", "",
 			"-", "",
 			"isbn", "",
+			"isbns", "",
+			":", "",
 			"(", "",
 			")", "",
 			"e-book", "",
