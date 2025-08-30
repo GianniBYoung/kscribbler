@@ -52,10 +52,11 @@ The quotes are uploaded to hardcover.app based on the book's ISBN. See the note 
 - This is a sqlite database with two tables: `books` and `quotes`
 - You can manipulate this database directly if you want to control what gets uploaded by setting `kscribbler_uploaded` to `1` for quotes you don't want uploaded
 - `telnet/ssh` into the kobo is possible and allows for manually running `kscribbler` if so desired
-- From the command line you can run `kscribbler --help` to see available options
+- From the main Kobo screen you can open nickelmenu and `Toggle Visibility of Kscribbler Options` to run the following commands:
   - `kscribbler --init` will initialize the database but not upload anything
   - `kscribbler --mark-all-as-uploaded` will initialize the database, mark all found quotes as upload but will not upload anything
     - Useful for testing/migrating
+  - The initial output is displayed but truncated. Full output is in the log file
 
 
 ## Contributing

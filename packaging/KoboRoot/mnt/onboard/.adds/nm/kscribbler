@@ -1,1 +1,2 @@
-menu_item:reader:Kscribbler Sync:cmd_spawn:quiet:/opt/bin/kscribbler >> /mnt/onboard/.adds/kscribbler/kscribbler.log 2>&1
+menu_item:main:Kscribbler Sync:cmd_spawn:quiet:/opt/bin/kscribbler >> /mnt/onboard/.adds/kscribbler/kscribbler.log 2>&1
+menu_item:main:Toggle Visibility of Kscribbler Options:cmd_spawn:quiet:/mnt/onboard/.adds/kscribbler/toggle-debug.sh
