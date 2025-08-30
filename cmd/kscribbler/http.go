@@ -44,3 +44,17 @@ func newHardcoverRequest(ctx context.Context, body []byte) *http.Request {
 
 	return req
 }
+
+func verifyHardcoverConnection(client *http.Client, ctx context.Context) {
+	req := newHardcoverRequest(ctx, []byte(`{"query": "conenctiontest  e { id }}"}`))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("Failed to connect to Hardcover API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Fatalf("Hardcover API returned non-200 status: %d %s", resp.StatusCode, resp.Status)
+	}
+}
