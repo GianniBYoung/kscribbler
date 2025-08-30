@@ -262,6 +262,7 @@ func main() {
 
 	ctx := context.Background()
 	client := newHTTPClient()
+	verifyHardcoverConnection(client, ctx)
 
 	kscribblerDB = connectKscribblerDB()
 	defer kscribblerDB.Close()
