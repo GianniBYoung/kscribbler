@@ -20,6 +20,7 @@ import (
 var authToken string
 var stopAfterInit bool
 var markAllAsUploaded bool
+var showVersion bool
 
 // koboToHardcover fleshes out struct and assocites book to hardcover.
 func (book *Book) koboToHardcover() {
@@ -201,6 +202,19 @@ func (entry Bookmark) postEntry(
 
 // Initializes the environment, database, and retrieves the last opened book and its bookmarks.
 func init() {
+	flag.BoolVar(&stopAfterInit, "init", false, "Stop execution after init() runs")
+	flag.BoolVar(
+		&markAllAsUploaded,
+		"mark-all-as-uploaded",
+		false,
+		"Mark all quotes in the database as uploaded (useful for migration)",
+	)
+	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
+	flag.Parse()
+	if showVersion {
+		fmt.Printf("v%s", version.Version)
+		os.Exit(0)
+	}
 	log.Printf("Starting Kscribbler v%s\n", version.Version)
 
 	godotenv.Load("/mnt/onboard/.adds/kscribbler/config.env")
@@ -231,14 +245,6 @@ func init() {
 }
 
 func main() {
-	flag.BoolVar(&stopAfterInit, "init", false, "Stop execution after init() runs")
-	flag.BoolVar(
-		&markAllAsUploaded,
-		"mark-all-as-uploaded",
-		false,
-		"Mark all quotes in the database as uploaded (useful for migration)",
-	)
-	flag.Parse()
 	if stopAfterInit {
 		log.Println(
 			"The init flag was set; stopping execution after database initialization. Quotes will not be uploaded.",
