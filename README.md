@@ -26,9 +26,7 @@ ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcov
 
 ## Upgrade
 
-Same process as installation for now. You should not need to re-add your hardcover token.
-
-I would like to make this over-the-air (OTA) updatable in the future, but the ways I've tested so far have been too hands-on techy for general users.
+From the main menu of your Kobo device open nickelmenu and select `Update Kscribbler` to download and install the latest version.
 
 ## Usage
 
