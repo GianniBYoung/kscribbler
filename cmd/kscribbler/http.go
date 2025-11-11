@@ -15,12 +15,21 @@ var hardcoverCert []byte
 
 const apiURL = "https://api.hardcover.app/v1/graphql"
 
-// newHTTPClient with embedded CA bundle for api.hardcover.app
+// newHTTPClient with system CA bundle and embedded CA for api.hardcover.app
 func newHTTPClient() *http.Client {
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(hardcoverCert) {
-		log.Fatalf("failed to parse embedded CA bundle... exiting")
+	// Start with the system certificate pool
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		// If system pool is unavailable, create a new pool
+		log.Printf("Warning: Unable to load system certificate pool: %v", err)
+		pool = x509.NewCertPool()
 	}
+
+	// Append the embedded Let's Encrypt certificate as a fallback
+	if !pool.AppendCertsFromPEM(hardcoverCert) {
+		log.Printf("Warning: Failed to parse embedded CA bundle")
+	}
+
 	tlsConfig := &tls.Config{
 		RootCAs: pool,
 	}
