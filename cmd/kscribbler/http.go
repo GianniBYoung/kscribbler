@@ -10,7 +10,7 @@ import (
 	"net/http"
 )
 
-//go:embed certs/lets-encrypt.pem
+//go:embed certs/bundle.pem
 var hardcoverCert []byte
 
 const apiURL = "https://api.hardcover.app/v1/graphql"
