@@ -190,11 +190,32 @@ func (entry Bookmark) postEntry(
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Error with post response %s", err)
+		return err
 	}
 	defer resp.Body.Close()
 
-	rawResp, _ := io.ReadAll(resp.Body)
+	rawResp, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading response body: %v", err)
+		return err
+	}
 	fmt.Println("Hardcover response:", string(rawResp))
+
+	// Parse the response to check for errors
+	var response Response
+	err = json.Unmarshal(rawResp, &response)
+	if err != nil {
+		log.Printf("Error unmarshaling response: %v", err)
+		return err
+	}
+
+	// Check if there were errors from Hardcover API
+	if response.Data.InsertReadingJournal.Errors != nil && *response.Data.InsertReadingJournal.Errors != "" {
+		log.Printf("Hardcover API returned error: %s", *response.Data.InsertReadingJournal.Errors)
+		return fmt.Errorf("hardcover API error: %s", *response.Data.InsertReadingJournal.Errors)
+	}
+
+	// Only mark as uploaded if there were no errors
 	entry.markAsUploaded()
 
 	return nil
@@ -237,6 +258,7 @@ func init() {
 
 	// Supplement book entries with ISBNs and Hardcover info
 	kscribblerDB = connectKscribblerDB()
+	syncISBNsFromKoboDB()
 	updateDBWithISBNs()
 	updateDBWithHardcoverInfo()
 	kscribblerDB.Close()
