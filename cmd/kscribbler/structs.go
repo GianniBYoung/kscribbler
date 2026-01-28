@@ -34,6 +34,13 @@ type Bookmark struct {
 
 // http response structure supporting books and reading journal insertions for hardcover.app
 type Response struct {
+	Errors []struct {
+		Message    string `json:"message"`
+		Extensions struct {
+			Path string `json:"path"`
+			Code string `json:"code"`
+		} `json:"extensions"`
+	} `json:"errors"`
 	Data struct {
 		Books []struct {
 			ID       int    `json:"id"`

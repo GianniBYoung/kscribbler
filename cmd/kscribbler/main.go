@@ -209,6 +209,12 @@ func (entry Bookmark) postEntry(
 		return err
 	}
 
+	// Check for top-level GraphQL errors first
+	if len(response.Errors) > 0 {
+		log.Printf("Hardcover API returned GraphQL error: %s", response.Errors[0].Message)
+		return fmt.Errorf("hardcover GraphQL error: %s", response.Errors[0].Message)
+	}
+
 	// Check if there were errors from Hardcover API
 	if response.Data.InsertReadingJournal.Errors != nil && *response.Data.InsertReadingJournal.Errors != "" {
 		log.Printf("Hardcover API returned error: %s", *response.Data.InsertReadingJournal.Errors)
