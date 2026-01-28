@@ -126,6 +126,47 @@ func populateBookTable() {
 	}
 }
 
+// syncISBNsFromKoboDB checks if ISBNs have been added/updated in KoboDB for books that exist in kscribblerDB
+func syncISBNsFromKoboDB() {
+	kscribblerDB := connectDatabases()
+	defer kscribblerDB.Close()
+
+	// Update existing books with ISBNs from KoboDB where kscribblerDB has NULL but KoboDB has a value
+	updateQuery := `
+		UPDATE book
+		SET isbn = (
+			SELECT DISTINCT c.ISBN
+			FROM koboDB.content c
+			JOIN koboDB.Bookmark b ON c.ContentID = b.VolumeID
+			WHERE b.VolumeID = book.book_id
+			AND c.ISBN IS NOT NULL
+			AND c.ISBN != ''
+			LIMIT 1
+		)
+		WHERE book.isbn IS NULL
+		AND EXISTS (
+			SELECT 1
+			FROM koboDB.content c
+			JOIN koboDB.Bookmark b ON c.ContentID = b.VolumeID
+			WHERE b.VolumeID = book.book_id
+			AND c.ISBN IS NOT NULL
+			AND c.ISBN != ''
+		);
+	`
+
+	log.Printf("Syncing ISBNs from KoboDB for existing books...")
+	result, err := kscribblerDB.Exec(updateQuery)
+	if err != nil {
+		log.Printf("failed to sync ISBNs from KoboDB: %v", err)
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected > 0 {
+		log.Printf("Updated %d books with ISBNs from KoboDB", rowsAffected)
+	}
+}
+
 // updateDBWithHardcoverInfo updates the kscribblerDB with missing hardcover info from Hardcover API.
 func updateDBWithHardcoverInfo() {
 
