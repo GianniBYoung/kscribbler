@@ -21,6 +21,7 @@ var authToken string
 var stopAfterInit bool
 var markAllAsUploaded bool
 var showVersion bool
+var uploadAnnotations bool
 
 // koboToHardcover fleshes out struct and assocites book to hardcover.
 func (book *Book) koboToHardcover() {
@@ -162,13 +163,11 @@ func (entry Bookmark) postEntry(
 
 	hardcoverType := "quote"
 	if entry.Type == "note" {
-		hardcoverType = "annotation"
-		entryText = fmt.Sprintf("%s\n\n============\n\n%s", quote, annotation)
-		log.Println(
-			"Skipping annotation upload until hardcover's api has better multiline support",
-			entryText,
-		)
-		return nil // skip for now because hardcover api has multiline formatting issues
+		if !uploadAnnotations {
+			log.Printf("Skipping annotation (UPLOAD_ANNOTATIONS is not enabled): %s", entry.BookmarkID)
+			return nil
+		}
+		entryText = fmt.Sprintf("%s\n\n---\n\n%s", quote, annotation)
 	}
 
 	entryText = strings.ReplaceAll(entryText, `"""`, `\"\"\"`)
@@ -216,7 +215,8 @@ func (entry Bookmark) postEntry(
 	}
 
 	// Check if there were errors from Hardcover API
-	if response.Data.InsertReadingJournal.Errors != nil && *response.Data.InsertReadingJournal.Errors != "" {
+	if response.Data.InsertReadingJournal.Errors != nil &&
+		*response.Data.InsertReadingJournal.Errors != "" {
 		log.Printf("Hardcover API returned error: %s", *response.Data.InsertReadingJournal.Errors)
 		return fmt.Errorf("hardcover API error: %s", *response.Data.InsertReadingJournal.Errors)
 	}
@@ -246,6 +246,7 @@ func init() {
 
 	godotenv.Load("/mnt/onboard/.adds/kscribbler/config.env")
 	authToken = os.Getenv("HARDCOVER_API_TOKEN")
+	uploadAnnotations = strings.ToLower(os.Getenv("UPLOAD_ANNOTATIONS")) == "true"
 	if authToken == "" {
 		log.Fatalf(
 			"HARDCOVER_API_TOKEN is not set.\nPlease set it in /mnt/onboard/.kobo/.adds/kscribbler/config.env\n",
