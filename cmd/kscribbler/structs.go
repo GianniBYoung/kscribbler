@@ -28,6 +28,7 @@ type Bookmark struct {
 	BookID             string         `db:"book_id"`
 	Quote              sql.NullString `db:"quote"`
 	Annotation         sql.NullString `db:"annotation"`
+	Page               sql.NullInt64  `db:"page"`
 	Type               string         `db:"type"`
 	KscribblerUploaded bool           `db:"kscribbler_uploaded"`
 }
@@ -159,6 +160,9 @@ func (book Book) String() string {
 		}
 		if bm.Annotation.Valid {
 			result += fmt.Sprintf("Annotation: %s\n", bm.Annotation.String)
+		}
+		if bm.Page.Valid {
+			result += fmt.Sprintf("Page: %d\n", bm.Page.Int64)
 		}
 
 		result += "--------------------------\n"

@@ -91,19 +91,75 @@ func populateQuoteTable() {
 	defer kscribblerDB.Close()
 
 	quoteQuery := `
-		INSERT OR IGNORE INTO quote(book_id,bookmark_id, type, quote, annotation, kscribbler_uploaded)
-	    SELECT b.VolumeID, b.BookmarkID, b.Type, TRIM(b.Text), b.Annotation, 
-	    CASE
-	        WHEN instr(lower(b.Annotation), 'kscrib') > 0 THEN 1
-	        ELSE 0
-	    END
-	 	FROM koboDB.Bookmark b
-	    WHERE b.Text IS NOT NULL AND TRIM(b.Text) != ''
+		INSERT OR IGNORE INTO quote(book_id, bookmark_id, type, quote, annotation, page, kscribbler_uploaded)
+		SELECT b.VolumeID, b.BookmarkID, b.Type, TRIM(b.Text), b.Annotation,
+		CASE
+			WHEN sp.StorePages > 0 AND ts.total_sections > 0 THEN
+				CAST(ROUND((COALESCE(c.VolumeIndex, 0) + b.ChapterProgress) * 1.0 / ts.total_sections * sp.StorePages) AS INTEGER)
+			ELSE NULL
+		END,
+		CASE
+			WHEN instr(lower(b.Annotation), 'kscrib') > 0 THEN 1
+			ELSE 0
+		END
+		FROM koboDB.Bookmark b
+		JOIN koboDB.content c ON b.ContentID = c.ContentID
+		LEFT JOIN (
+			SELECT ContentID, StorePages FROM koboDB.content WHERE StorePages > 0
+		) sp ON sp.ContentID = b.VolumeID
+		LEFT JOIN (
+			SELECT BookID, COUNT(*) as total_sections
+			FROM koboDB.content WHERE ContentType = 9 GROUP BY BookID
+		) ts ON ts.BookID = b.VolumeID
+		WHERE b.Text IS NOT NULL AND TRIM(b.Text) != ''
    `
 	log.Printf("Populating quote table...")
 	_, err := kscribblerDB.Exec(quoteQuery)
 	if err != nil {
 		log.Fatalf("failed to populate kscribblerDB book Table: %v", err)
+	}
+
+	syncPageNumbers(kscribblerDB)
+}
+
+// syncPageNumbers backfills page numbers for existing quotes that are missing them.
+func syncPageNumbers(kscribblerDB *sqlx.DB) {
+	updateQuery := `
+		UPDATE quote
+		SET page = (
+			SELECT CAST(ROUND(
+				(COALESCE(c.VolumeIndex, 0) + b.ChapterProgress) * 1.0
+				/ ts.total_sections * sp.StorePages
+			) AS INTEGER)
+			FROM koboDB.Bookmark b
+			JOIN koboDB.content c ON b.ContentID = c.ContentID
+			JOIN (
+				SELECT ContentID, StorePages FROM koboDB.content WHERE StorePages > 0
+			) sp ON sp.ContentID = b.VolumeID
+			JOIN (
+				SELECT BookID, COUNT(*) as total_sections
+				FROM koboDB.content WHERE ContentType = 9 GROUP BY BookID
+			) ts ON ts.BookID = b.VolumeID
+			WHERE b.BookmarkID = quote.bookmark_id
+		)
+		WHERE quote.page IS NULL
+		AND EXISTS (
+			SELECT 1 FROM koboDB.Bookmark b
+			JOIN (SELECT ContentID, StorePages FROM koboDB.content WHERE StorePages > 0) sp
+			ON sp.ContentID = b.VolumeID
+			WHERE b.BookmarkID = quote.bookmark_id
+		);
+	`
+
+	result, err := kscribblerDB.Exec(updateQuery)
+	if err != nil {
+		log.Printf("failed to sync page numbers: %v", err)
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected > 0 {
+		log.Printf("Backfilled page numbers for %d quotes", rowsAffected)
 	}
 }
 
@@ -234,6 +290,7 @@ func updateDBWithISBNs() {
 				book_id,
 				quote,
 				annotation,
+				page,
 				type,
 				kscribbler_uploaded
 			FROM quote
@@ -282,6 +339,7 @@ func loadBooksFromDB() []Book {
 				book_id,
 				quote,
 				annotation,
+				page,
 				type,
 				kscribbler_uploaded
 			FROM quote

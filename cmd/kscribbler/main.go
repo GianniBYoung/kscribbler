@@ -171,6 +171,10 @@ func (entry Bookmark) postEntry(
 		entryText = fmt.Sprintf("%s\n\n---\n\n%s", quote, annotation)
 	}
 
+	if entry.Page.Valid && entry.Page.Int64 > 0 {
+		entryText = fmt.Sprintf("p. %d\n\n%s", entry.Page.Int64, entryText)
+	}
+
 	entryText = strings.ReplaceAll(entryText, `"""`, `\"\"\"`)
 	mutation := fmt.Sprintf(`
 	mutation postquote {
