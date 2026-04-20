@@ -22,6 +22,7 @@ var stopAfterInit bool
 var markAllAsUploaded bool
 var showVersion bool
 var uploadAnnotations bool
+var privacySetting int
 
 // koboToHardcover fleshes out struct and assocites book to hardcover.
 func (book *Book) koboToHardcover() {
@@ -174,12 +175,12 @@ func (entry Bookmark) postEntry(
 	mutation := fmt.Sprintf(`
 	mutation postquote {
     insert_reading_journal(
-		object: {privacy_setting_id: 1, book_id: %d, edition_id: %d, event: "%s", tags: {spoiler: %t, category: "%s", tag: ""}, entry: """%s""" }
+		object: {privacy_setting_id: %d, book_id: %d, edition_id: %d, event: "%s", tags: {spoiler: %t, category: "%s", tag: ""}, entry: """%s""" }
      ) {
     errors
   }
 }`,
-		hardcoverID, hardcoverEdition, hardcoverType, spoiler,
+		privacySetting, hardcoverID, hardcoverEdition, hardcoverType, spoiler,
 		hardcoverType, entryText)
 
 	reqBody := map[string]string{"query": mutation}
@@ -247,6 +248,14 @@ func init() {
 	godotenv.Load("/mnt/onboard/.adds/kscribbler/config.env")
 	authToken = os.Getenv("HARDCOVER_API_TOKEN")
 	uploadAnnotations = strings.ToLower(os.Getenv("UPLOAD_ANNOTATIONS")) == "true"
+
+	privacySetting = 1
+	switch strings.ToLower(os.Getenv("PRIVACY")) {
+	case "followers":
+		privacySetting = 2
+	case "private":
+		privacySetting = 3
+	}
 	if authToken == "" {
 		log.Fatalf(
 			"HARDCOVER_API_TOKEN is not set.\nPlease set it in /mnt/onboard/.kobo/.adds/kscribbler/config.env\n",
