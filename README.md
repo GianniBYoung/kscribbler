@@ -1,15 +1,13 @@
-# kscribbler
+# Kscribbler
 
 Sync your Kobo highlights to [hardcover.app](https://hardcover.app)!
 
 Here is an [example](https://hardcover.app/books/crooked-kingdom/journals/@countmancy?referrer_id=28377) for the book Crooked Kingdom by Leigh Bardugo:
 
-
-
 *K* - Kobo|kepub
 *Scribe* - Someone who writes stuff to a new location
 
-ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcover.app/@countmancy?referrer_id=28377) 
+ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcover.app/@countmancy?referrer_id=28377)
 
 ## Installation
 1. Download and install [nickelmenu](https://pgaskin.net/NickelMenu)
@@ -19,10 +17,10 @@ ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcov
    - Navigate to the `.kobo` directory on your Kobo (might need to show hidden files)
    - Copy the `KoboRoot.tgz` into this directory and unmount the device safely. This will trigger a reboot and upgrade.
 4. Remount the device and navigate to `/mnt/onboard/.adds/kscribbler`.
-  - If you don't see this directory check for `/mnt/onboard/.adds/kscribbler`
+   - If you don't see this directory check for `/mnt/onboard/.adds/kscribbler`
 5. Copy the example config file and add your token:
-    - `cp config.env.example config.env`
-    - `vi config.env`
+   - `cp config.env.example config.env`
+   - `vi config.env`
 
 ## Upgrade
 
@@ -41,6 +39,16 @@ The quotes are uploaded to hardcover.app based on the book's ISBN. See the note 
   - A note with `kscrib:<you isbn number with no angle brackets` can be added anywhere in the book to manually set the ISBN
   - Can be useful for sideloaded books
 
+## Configuration
+
+All configuration is done via `/mnt/onboard/.adds/kscribbler/config.env`. See `config.env.example` for a template.
+
+| Variable | Default | Description |
+|---|---|---|
+| `HARDCOVER_API_TOKEN` | *(required)* | Your Hardcover API token |
+| `UPLOAD_ANNOTATIONS` | `false` | Set to `true` to upload annotations (notes) alongside quotes. When enabled, the highlighted passage and your note are combined into a single journal entry separated by `--- Personal Annotation ---` |
+| `PRIVACY` | `public` | Privacy level for uploaded journal entries. Options: `public`, `followers`, `private` |
+
 ## Troubleshooting
 - Logs are stored in `/mnt/onboard/.adds/kscribbler/kscribbler.log`
 - If you are having issues with the quotes not being uploaded, check that hardcover.app has an edition for the ISBN.
@@ -56,7 +64,6 @@ The quotes are uploaded to hardcover.app based on the book's ISBN. See the note 
     - Useful for testing/migrating
   - The initial output is displayed but truncated. Full output is in the log file
 
-
 ## Contributing
 - Star the repository ⭐
 - File bug reports
@@ -64,6 +71,6 @@ The quotes are uploaded to hardcover.app based on the book's ISBN. See the note 
 - Suggest improvements
 - Share the project with others if you find it useful
 
-## Check out my other ebook-related projects
-  - [hardcover-quotes](https://github.com/GianniBYoung/hardcover-quotes) -> Display hardcover *reading journal* quotes in your terminal or on a [trmnl e-ink display](https://usetrmnl.com) 
-  - [simpleISBN](https://github.com/GianniBYoung/simpleISBN) -> A simple library to parse and convert ISBNs
+## Check Out My Other Ebook-Related Projects
+- [hardcover-quotes](https://github.com/GianniBYoung/hardcover-quotes) -> Display hardcover *reading journal* quotes in your terminal or on a [trmnl e-ink display](https://usetrmnl.com)
+- [simpleISBN](https://github.com/GianniBYoung/simpleISBN) -> A simple library to parse and convert ISBNs
