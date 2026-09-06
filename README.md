@@ -21,6 +21,7 @@ ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcov
 5. Copy the example config file and add your token:
    - `cp config.env.example config.env`
    - `vi config.env`
+   - A Hardcover Personal Access Token (PAT) with the necessary permissions (`read:me`, `read:catalog`, `write:library`) can be generated directly from this [link](https://hardcover.app/account/api/keys/new?scope=read:me+read:catalog+write:library).
 
 ## Upgrade
 
@@ -45,7 +46,7 @@ All configuration is done via `/mnt/onboard/.adds/kscribbler/config.env`. See `c
 
 | Variable | Default | Description |
 |---|---|---|
-| `HARDCOVER_API_TOKEN` | *(required)* | Your Hardcover API token |
+| `HARDCOVER_API_TOKEN` | *(required)* | Your Hardcover Personal Access Token (PAT). Can be generated with required scopes [here](https://hardcover.app/account/api/keys/new?scope=read:me+read:catalog+write:library) |
 | `UPLOAD_ANNOTATIONS` | `false` | Set to `true` to upload annotations (notes) alongside quotes. When enabled, the highlighted passage and your note are combined into a single journal entry separated by `--- Personal Annotation ---` |
 | `PRIVACY` | `public` | Privacy level for uploaded journal entries. Options: `public`, `followers`, `private` |
 

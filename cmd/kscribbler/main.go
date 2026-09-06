@@ -266,6 +266,11 @@ func init() {
 		)
 	}
 
+	authToken = strings.TrimSpace(authToken)
+	if !strings.HasPrefix(authToken, "Bearer ") {
+		authToken = "Bearer " + authToken
+	}
+
 	if devDBPath := os.Getenv("KSCRIBBLER_DB_PATH"); devDBPath != "" {
 		koboDBPath = devDBPath + "/KoboReader.sqlite"
 		kscribblerDBPath = devDBPath + "/kscribbler.sqlite"

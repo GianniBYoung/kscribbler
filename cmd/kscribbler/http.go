@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"log"
 	"net/http"
+	"strings"
 )
 
 //go:embed certs/bundle.pem
@@ -44,7 +45,12 @@ func newHardcoverRequest(ctx context.Context, body []byte) *http.Request {
 		log.Fatalf("Failed to create newHardcoverRequest: %v", err)
 	}
 
-	req.Header.Set("Authorization", authToken)
+	authHeader := strings.TrimSpace(authToken)
+	if authHeader != "" && !strings.HasPrefix(authHeader, "Bearer ") {
+		authHeader = "Bearer " + authHeader
+	}
+
+	req.Header.Set("Authorization", authHeader)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(
 		"User-Agent",
@@ -55,7 +61,7 @@ func newHardcoverRequest(ctx context.Context, body []byte) *http.Request {
 }
 
 func verifyHardcoverConnection(client *http.Client, ctx context.Context) {
-	req := newHardcoverRequest(ctx, []byte(`{"query": "conenctiontest  e { id }}"}`))
+	req := newHardcoverRequest(ctx, []byte(`{"query": "query connectionTest { me { id } }"}`))
 
 	resp, err := client.Do(req)
 	if err != nil {
