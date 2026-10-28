@@ -1,5 +1,6 @@
 #include <QFile>
 #include <QFont>
+#include <QHBoxLayout>
 #include <QPainter>
 #include <QPixmap>
 #include <QProcess>
@@ -80,4 +81,27 @@ void MenuController::triggered(int option) {
     toast("Kscribbler sync started");
     break;
   }
+}
+
+bool MenuInjector::eventFilter(QObject *watched, QEvent *event) {
+  if (event->type() != QEvent::Show || watched->objectName() != "settingsIcon") {
+    return false;
+  }
+
+  QLabel *settingsIcon = qobject_cast<QLabel *>(watched);
+  QWidget *menu = settingsIcon ? settingsIcon->parentWidget() : nullptr;
+  if (!menu || menu->property("kscribblerInjected").toBool()) {
+    return false;
+  }
+
+  QHBoxLayout *layout = menu->findChild<QHBoxLayout *>("bottomHorizontalLayout");
+  if (!layout) {
+    nh_log("Error: unable to find bottomHorizontalLayout");
+    return false;
+  }
+
+  menu->setProperty("kscribblerInjected", true);
+  MenuController *ctl = new MenuController(settingsIcon->height(), menu);
+  layout->insertWidget(layout->count() - 1, ctl->icon);
+  return false;
 }

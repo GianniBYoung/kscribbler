@@ -1,5 +1,4 @@
-#include <QDir>
-#include <QHBoxLayout>
+#include <QCoreApplication>
 #include <QString>
 
 #include <NickelHook.h>
@@ -7,12 +6,7 @@
 #include "kscribbler.h"
 #include "menucontroller.h"
 
-// Hook structure and Nickel symbols adapted from NickelHardcover (MIT, https://codeberg.org/StrayRose/NickelHardcover).
-
-typedef QWidget ReadingMenuView;
-static void (*ReadingMenuView__constructor)(ReadingMenuView *_this, QWidget *parent, bool unknown);
-static void (*ReadingMenuView__constructor_2)(ReadingMenuView *_this, QWidget *parent, QByteArray const &unknownArray,
-                                              bool unknownBool);
+// Nickel symbols adapted from NickelHardcover (MIT, https://codeberg.org/StrayRose/NickelHardcover).
 
 MainWindowController *(*MainWindowController__sharedInstance)();
 QWidget *(*MainWindowController__pushView)(MainWindowController *mwc, QWidget *view);
@@ -75,9 +69,8 @@ static struct nh_info Kscribbler = (struct nh_info){
 };
 
 // clang-format off
+// no Nickel hooks: the menu icon is added by MenuInjector (see menucontroller.h)
 static struct nh_hook KscribblerHook[] = {
-  { .sym = "_ZN15ReadingMenuViewC1EP7QWidgetb",               .sym_new = "_nh_ReadingMenuView__constructor",   .lib = "libnickel.so.1.0.0", .out = nh_symoutptr(ReadingMenuView__constructor),   .desc = "Inject kscribbler menu", .optional = true },
-  { .sym = "_ZN15ReadingMenuViewC1EP7QWidgetRK10QByteArrayb", .sym_new = "_nh_ReadingMenuView__constructor_2", .lib = "libnickel.so.1.0.0", .out = nh_symoutptr(ReadingMenuView__constructor_2), .desc = "Inject kscribbler menu (4.44+)", .optional = true },
   {0},
 };
 
@@ -100,6 +93,17 @@ static struct nh_dlsym KscribblerDlsym[] = {
 };
 // clang-format on
 
+static int kscribbler_init() {
+  QCoreApplication *app = QCoreApplication::instance();
+  if (!app) {
+    nh_log("Error: no QCoreApplication yet, kscribbler menu disabled");
+    return 0;
+  }
+  app->installEventFilter(new MenuInjector(app));
+  nh_log("kscribbler: installed reading menu injector");
+  return 0;
+}
+
 static bool kscribbler_uninstall() {
   nh_delete_file("/opt/bin/kscribbler");
   nh_delete_file("/mnt/onboard/.adds/nm/kscribbler");
@@ -107,30 +111,5 @@ static bool kscribbler_uninstall() {
   return true;
 }
 
-NickelHook(.init = nullptr, .info = &Kscribbler, .hook = KscribblerHook, .dlsym = KscribblerDlsym,
+NickelHook(.init = &kscribbler_init, .info = &Kscribbler, .hook = KscribblerHook, .dlsym = KscribblerDlsym,
            .uninstall = &kscribbler_uninstall);
-
-static void injectMenuWidget(ReadingMenuView *parent) {
-  QHBoxLayout *layout = parent->findChild<QHBoxLayout *>("bottomHorizontalLayout");
-  QLabel *settingsIcon = parent->findChild<QLabel *>("settingsIcon");
-
-  if (layout && settingsIcon) {
-    MenuController *ctl = new MenuController(settingsIcon->height(), parent);
-    layout->insertWidget(layout->count() - 1, ctl->icon);
-  } else {
-    nh_log("Error: unable to find bottomHorizontalLayout and settingsIcon");
-  }
-}
-
-extern "C" __attribute__((visibility("default"))) void _nh_ReadingMenuView__constructor(ReadingMenuView *_this,
-                                                                                        QWidget *parent, bool unknown) {
-  ReadingMenuView__constructor(_this, parent, unknown);
-  injectMenuWidget(parent);
-}
-
-extern "C" __attribute__((visibility("default"))) void
-_nh_ReadingMenuView__constructor_2(ReadingMenuView *_this, QWidget *parent, QByteArray const &unknownArray,
-                                   bool unknownBool) {
-  ReadingMenuView__constructor_2(_this, parent, unknownArray, unknownBool);
-  injectMenuWidget(parent);
-}
