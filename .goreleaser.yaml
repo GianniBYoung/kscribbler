@@ -33,7 +33,7 @@ archives:
       - src: ./dist/kscribbler*/kscribbler
         dst: ./opt/bin
 release:
-  draft: true
+  draft: false
 snapshot:
   version_template: "{{ incpatch .Version }}-testing+{{ .ShortCommit }}"
 checksum:
