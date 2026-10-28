@@ -1,0 +1,48 @@
+---
+name: Testing Build
+
+# Publishes a rolling "testing" pre-release that devices can install with
+# "Kscribbler Install Testing Build" (debug menu) or UPDATE_CHANNEL="testing".
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'test/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: testing-release
+  cancel-in-progress: true
+
+jobs:
+  testing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build snapshot
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          args: release --snapshot --clean
+
+      - name: Publish testing pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete testing --yes --cleanup-tag || true
+          gh release create testing dist/KoboRoot.tgz dist/checksums.txt \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Testing build (${GITHUB_REF_NAME} @ ${GITHUB_SHA::7})" \
+            --notes "Rolling test build from \`${GITHUB_REF_NAME}\` at ${GITHUB_SHA}. Install from the Kobo debug menu: Kscribbler Install Testing Build."

@@ -25,7 +25,15 @@ ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcov
 
 ## Upgrade
 
-From the main menu of your Kobo device open nickelmenu and select `Update Kscribbler` to download and install the latest version.
+From the main menu of your Kobo device open nickelmenu and select `Upgrade Kscribbler` to download and install the latest version.
+
+The download is verified against the release's `checksums.txt` before it is installed.
+
+### Update channels / testing builds
+- `UPDATE_CHANNEL` in `config.env` picks what `Upgrade Kscribbler` installs: `stable` (default), `testing`, or a release tag such as `v1.4.0` to pin or roll back.
+- `testing` is a rolling pre-release published by the **Testing Build** workflow. Run it from the Actions tab on any branch, or push to a `test/**` branch.
+- With the debug options visible (`Toggle Visibility of Kscribbler Options`), `Kscribbler Install Testing Build` and `Kscribbler Reinstall Stable Build` install that channel right away, even if it is already installed.
+- From a shell: `/mnt/onboard/.adds/kscribbler/upgrade.sh [stable|testing|<tag>] [--force]`
 
 ## Usage
 
