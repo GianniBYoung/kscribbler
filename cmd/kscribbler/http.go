@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -60,7 +61,8 @@ func newHardcoverRequest(ctx context.Context, body []byte) *http.Request {
 	return req
 }
 
-func verifyHardcoverConnection(client *http.Client, ctx context.Context) {
+// verifyHardcoverConnection checks the token against the API and returns the HTTP status.
+func verifyHardcoverConnection(client *http.Client, ctx context.Context) int {
 	req := newHardcoverRequest(ctx, []byte(`{"query": "query connectionTest { me { id } }"}`))
 
 	resp, err := client.Do(req)
@@ -70,6 +72,8 @@ func verifyHardcoverConnection(client *http.Client, ctx context.Context) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("Hardcover API returned non-200 status: %d %s", resp.StatusCode, resp.Status)
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Hardcover API returned %s: %s", resp.Status, body)
 	}
+	return resp.StatusCode
 }

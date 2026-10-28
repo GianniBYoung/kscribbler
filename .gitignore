@@ -27,3 +27,11 @@ dist
 kscribbler.sqlite
 KoboRoot.tgz
 /kscribbler
+
+# NickelHook plugin build output (copied into KoboRoot by CI)
+hook/*.so
+hook/src/*.o
+hook/src/*.moc
+hook/.kobo
+hook/KoboRoot.tgz
+packaging/KoboRoot/usr/local/Kobo/imageformats/libkscribbler.so

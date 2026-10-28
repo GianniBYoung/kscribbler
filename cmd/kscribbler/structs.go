@@ -51,7 +51,7 @@ type Response struct {
 			} `json:"editions"`
 		} `json:"books"`
 		InsertReadingJournal struct {
-			Errors *string `json:"errors"`
+			Errors []string `json:"errors"`
 		} `json:"insert_reading_journal"`
 	} `json:"data"`
 }

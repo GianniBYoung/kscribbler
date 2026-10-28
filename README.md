@@ -18,10 +18,10 @@ ps. add me on hardcover 🤓 [https://hardcover.app/@countmancy](https://hardcov
    - Copy the `KoboRoot.tgz` into this directory and unmount the device safely. This will trigger a reboot and upgrade.
 4. Remount the device and navigate to `/mnt/onboard/.adds/kscribbler`.
    - If you don't see this directory check for `/mnt/onboard/.adds/kscribbler`
-5. Copy the example config file and add your token:
-   - `cp config.env.example config.env`
-   - `vi config.env`
-   - A Hardcover Personal Access Token (PAT) with the necessary permissions (`read:me`, `read:catalog`, `write:library`) can be generated directly from this [link](https://hardcover.app/account/api/keys/new?scope=read:me+read:catalog+write:library).
+5. Copy the example config file: `cp config.env.example config.env`
+6. Connect to Hardcover, either:
+   - **Sign in (recommended):** with WiFi on, open a book, tap the top of the screen and tap the **K** icon in the reading menu, then `Sign in to Hardcover`. Scan the QR code (or visit the link and enter the code), approve, then tap `Continue`. The token is saved to `/mnt/onboard/.adds/kscribbler/token.json` and refreshed automatically.
+   - **Personal access token:** add it to `HARDCOVER_API_TOKEN` in `config.env`. A Hardcover Personal Access Token (PAT) with the necessary permissions (`read:me`, `read:catalog`, `write:library`) can be generated directly from this [link](https://hardcover.app/account/api/keys/new?scope=read:me+read:catalog+write:library).
 
 ## Upgrade
 
@@ -36,6 +36,8 @@ The download is verified against the release's `checksums.txt` before it is inst
 - From a shell: `/mnt/onboard/.adds/kscribbler/upgrade.sh [stable|testing|<tag>] [--force]`
 
 ## Usage
+
+The **K** icon in the reading menu has `Sign in to Hardcover` and `Sync highlights now`.
 
 Once installed `nickelmenu` should have a new entry in the right corner of reading view that will trigger a sync when clicked.
 
@@ -54,8 +56,9 @@ All configuration is done via `/mnt/onboard/.adds/kscribbler/config.env`. See `c
 
 | Variable | Default | Description |
 |---|---|---|
-| `HARDCOVER_API_TOKEN` | *(required)* | Your Hardcover Personal Access Token (PAT). Can be generated with required scopes [here](https://hardcover.app/account/api/keys/new?scope=read:me+read:catalog+write:library) |
+| `HARDCOVER_API_TOKEN` | *(optional when signed in)* | Your Hardcover Personal Access Token (PAT). Can be generated with required scopes [here](https://hardcover.app/account/api/keys/new?scope=read:me+read:catalog+write:library) |
 | `UPLOAD_ANNOTATIONS` | `false` | Set to `true` to upload annotations (notes) alongside quotes. When enabled, the highlighted passage and your note are combined into a single journal entry separated by `--- Personal Annotation ---` |
+| `HARDCOVER_CLIENT_ID` | *(built in)* | Override the OAuth client ID used by sign-in |
 | `PRIVACY` | `public` | Privacy level for uploaded journal entries. Options: `public`, `followers`, `private` |
 
 ## Troubleshooting
