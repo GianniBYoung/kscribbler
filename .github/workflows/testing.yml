@@ -17,13 +17,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  hook:
+    uses: ./.github/workflows/build-hook.yml
+
   testing:
+    needs: hook
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Download plugin
+        uses: actions/download-artifact@v8
+        with:
+          name: libkscribbler
+          path: packaging/KoboRoot/usr/local/Kobo/imageformats
 
       - name: Install Go
         uses: actions/setup-go@v7
