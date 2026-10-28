@@ -29,6 +29,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The rolling "testing" tag isn't semver; goreleaser would pick it as the current version.
+      - name: Drop rolling testing tag
+        run: git tag -d testing || true
+
       - name: Download plugin
         uses: actions/download-artifact@v8
         with:
