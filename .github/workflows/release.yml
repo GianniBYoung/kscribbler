@@ -10,21 +10,31 @@ permissions:
   contents: write
 
 jobs:
+  hook:
+    uses: ./.github/workflows/build-hook.yml
+
   release:
+    needs: hook
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Download plugin
+        uses: actions/download-artifact@v8
+        with:
+          name: libkscribbler
+          path: packaging/KoboRoot/usr/local/Kobo/imageformats
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
-          version: latest
+          version: '~> v2'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

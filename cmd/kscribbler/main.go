@@ -21,6 +21,8 @@ var authToken string
 var stopAfterInit bool
 var markAllAsUploaded bool
 var showVersion bool
+var oauthRequestFlag bool
+var oauthSetCode string
 var uploadAnnotations bool
 var privacySetting int
 
@@ -220,10 +222,9 @@ func (entry Bookmark) postEntry(
 	}
 
 	// Check if there were errors from Hardcover API
-	if response.Data.InsertReadingJournal.Errors != nil &&
-		*response.Data.InsertReadingJournal.Errors != "" {
-		log.Printf("Hardcover API returned error: %s", *response.Data.InsertReadingJournal.Errors)
-		return fmt.Errorf("hardcover API error: %s", *response.Data.InsertReadingJournal.Errors)
+	if errs := response.Data.InsertReadingJournal.Errors; len(errs) > 0 {
+		log.Printf("Hardcover API returned error: %s", strings.Join(errs, "; "))
+		return fmt.Errorf("hardcover API error: %s", strings.Join(errs, "; "))
 	}
 
 	// Only mark as uploaded if there were no errors
@@ -242,6 +243,8 @@ func init() {
 		"Mark all quotes in the database as uploaded (useful for migration)",
 	)
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
+	flag.BoolVar(&oauthRequestFlag, "oauth-request", false, "Start Hardcover sign-in and print the device code as JSON (used by the NickelHook plugin)")
+	flag.StringVar(&oauthSetCode, "oauth-set", "", "Exchange an approved device code for a token and save it (used by the NickelHook plugin)")
 	flag.Parse()
 	if showVersion {
 		fmt.Printf("v%s", version.Version)
@@ -250,7 +253,14 @@ func init() {
 	log.Printf("Starting Kscribbler v%s\n", version.Version)
 
 	godotenv.Load("/mnt/onboard/.adds/kscribbler/config.env")
-	authToken = os.Getenv("HARDCOVER_API_TOKEN")
+
+	if oauthRequestFlag {
+		oauthRequest()
+	}
+	if oauthSetCode != "" {
+		oauthSet(oauthSetCode)
+	}
+
 	uploadAnnotations = strings.ToLower(os.Getenv("UPLOAD_ANNOTATIONS")) == "true"
 
 	privacySetting = 1
@@ -260,15 +270,20 @@ func init() {
 	case "private":
 		privacySetting = 3
 	}
-	if authToken == "" {
-		log.Fatalf(
-			"HARDCOVER_API_TOKEN is not set.\nPlease set it in /mnt/onboard/.kobo/.adds/kscribbler/config.env\n",
-		)
-	}
 
-	authToken = strings.TrimSpace(authToken)
-	if !strings.HasPrefix(authToken, "Bearer ") {
-		authToken = "Bearer " + authToken
+	ctx := context.Background()
+	client := newHTTPClient()
+	session := resolveAuthToken(client, ctx)
+	status := verifyHardcoverConnection(client, ctx)
+	if status == http.StatusUnauthorized && session != nil && session.RefreshToken != "" {
+		if err := refreshTokens(client, ctx, session); err != nil {
+			log.Fatalf("Hardcover rejected the saved token and refresh failed: %v", err)
+		}
+		authToken = session.AccessToken
+		status = verifyHardcoverConnection(client, ctx)
+	}
+	if status != http.StatusOK {
+		log.Fatalf("Hardcover API returned non-200 status: %d", status)
 	}
 
 	if devDBPath := os.Getenv("KSCRIBBLER_DB_PATH"); devDBPath != "" {
@@ -315,7 +330,6 @@ func main() {
 
 	ctx := context.Background()
 	client := newHTTPClient()
-	verifyHardcoverConnection(client, ctx)
 
 	kscribblerDB = connectKscribblerDB()
 	defer kscribblerDB.Close()

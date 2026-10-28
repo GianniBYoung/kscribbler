@@ -34,5 +34,7 @@ archives:
         dst: ./opt/bin
 release:
   draft: true
+snapshot:
+  version_template: "{{ incpatch .Version }}-testing+{{ .ShortCommit }}"
 checksum:
   name_template: checksums.txt
